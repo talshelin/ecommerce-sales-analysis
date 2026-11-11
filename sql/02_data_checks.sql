@@ -137,3 +137,49 @@ FROM dbo.orders AS o
 LEFT JOIN dbo.payments AS p
        ON p.order_id = o.order_id
 WHERE p.order_id IS NULL;
+-- 1 order: delivered, 2016-09-15 (the first weeks of the data)
+-- inconsistent (a delivered order should be paid), but a single row
+
+-- Orders without a review, by status
+SELECT o.order_status,
+       COUNT(*) AS orders_without_review
+FROM dbo.orders AS o
+LEFT JOIN dbo.reviews AS r
+       ON r.order_id = o.order_id
+WHERE r.order_id IS NULL
+GROUP BY o.order_status
+ORDER BY orders_without_review DESC;
+-- delivered 646 | shipped 75 | canceled 20 | unavailable 14 | processing 6 | invoiced 5 | created 2
+-- total 768 = 99,441 orders - 98,673 orders in reviews
+-- reviews are optional, so this is expected; review scores describe only reviewed orders
+
+-- Every product in order_items exists in products
+SELECT COUNT(*) AS items_without_product
+FROM dbo.order_items AS oi
+LEFT JOIN dbo.products AS p
+       ON p.product_id = oi.product_id
+WHERE p.product_id IS NULL;
+
+-- Every seller in order_items exists in sellers
+SELECT COUNT(*) AS items_without_seller
+FROM dbo.order_items AS oi
+LEFT JOIN dbo.sellers AS s
+       ON s.seller_id = oi.seller_id
+WHERE s.seller_id IS NULL;
+
+-- Every order has a customer record
+SELECT COUNT(*) AS orders_without_customer
+FROM dbo.orders AS o
+LEFT JOIN dbo.customers AS c
+       ON c.customer_id = o.customer_id
+WHERE c.customer_id IS NULL;
+
+-- Product categories without an English name
+SELECT p.product_category_name,
+       COUNT(*) AS products
+FROM dbo.products AS p
+LEFT JOIN dbo.category_translation AS ct
+       ON ct.product_category_name = p.product_category_name
+WHERE ct.product_category_name IS NULL
+GROUP BY p.product_category_name
+ORDER BY products DESC;
