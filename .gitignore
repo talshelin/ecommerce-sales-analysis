@@ -1,0 +1,12 @@
+# Raw data is downloaded from Kaggle (see README) and never stored in the repo
+data/raw/
+
+# Power BI backups and Office lock files
+*.pbix.bak
+~$*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
