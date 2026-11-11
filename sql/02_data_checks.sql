@@ -213,3 +213,15 @@ FROM dbo.orders;
 -- purchase and estimated dates are always set (NOT NULL in the table)
 -- the other gaps grow along the journey: orders that stop early (canceled, in transit)
 -- never get the later dates
+
+-- orders without a delivery date, by status
+SELECT order_status,
+       COUNT(*) AS orders_without_delivery_date
+FROM dbo.orders
+WHERE order_delivered_customer_date IS NULL
+GROUP BY order_status
+ORDER BY orders_without_delivery_date DESC;
+-- shipped 1,107 | canceled 619 | unavailable 609 | invoiced 314 | processing 301
+-- created 5 | delivered 8 | approved 2 (total 2,965)
+-- 2,957 are expected (the order never reached the customer);
+-- 8 delivered orders have no delivery date -> cannot be used for delivery time
