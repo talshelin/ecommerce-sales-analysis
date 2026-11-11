@@ -225,3 +225,33 @@ ORDER BY orders_without_delivery_date DESC;
 -- created 5 | delivered 8 | approved 2 (total 2,965)
 -- 2,957 are expected (the order never reached the customer);
 -- 8 delivered orders have no delivery date -> cannot be used for delivery time
+
+-- reviews: share of reviews without a text message
+-- 100.0 avoids integer division; the brackets make the subtraction happen first
+SELECT COUNT(*)                                                      AS total_reviews,
+       COUNT(*) - COUNT(review_comment_message)                      AS reviews_without_text,
+       100.0 * (COUNT(*) - COUNT(review_comment_message)) / COUNT(*) AS pct_without_text
+FROM dbo.reviews;
+-- 99,224 | 58,256 | 58.7%
+-- most reviews have only a score -> satisfaction is measured with review_score
+
+-- products: missing category and size information
+SELECT COUNT(*)                                 AS total_products,
+       COUNT(*) - COUNT(product_category_name)  AS null_category,
+       COUNT(*) - COUNT(product_photos_qty)     AS null_photos,
+       COUNT(*) - COUNT(product_weight_g)       AS null_weight
+FROM dbo.products;
+-- 32,951 | 610 | 610 | 2
+-- the same 610 products have no category, name length, description length or photo count
+
+-- Columns used in the analysis: no missing values expected
+SELECT COUNT(*) - COUNT(review_score)  AS null_review_score  FROM dbo.reviews;
+SELECT COUNT(*) - COUNT(payment_type)  AS null_payment_type,
+       COUNT(*) - COUNT(payment_value) AS null_payment_value FROM dbo.payments;
+SELECT COUNT(*) - COUNT(customer_unique_id) AS null_person,
+       COUNT(*) - COUNT(customer_state)     AS null_state    FROM dbo.customers;
+SELECT COUNT(*) - COUNT(price)         AS null_price,
+       COUNT(*) - COUNT(freight_value) AS null_freight,
+       COUNT(*) - COUNT(product_id)    AS null_product,
+       COUNT(*) - COUNT(seller_id)     AS null_seller    FROM dbo.order_items;
+-- all 0
