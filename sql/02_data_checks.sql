@@ -195,3 +195,21 @@ ORDER BY products DESC;
      768 orders have no review.
    - 610 products have no category and 2 categories have no English name.
 */
+
+
+/* ---------- Completeness: where are values missing, and why? ----------
+   COUNT(column) skips NULLs, so COUNT(*) - COUNT(column) = number of NULLs.
+*/
+
+-- orders: missing dates, in the order of the order journey
+SELECT COUNT(*)                                        AS total_orders,
+       COUNT(*) - COUNT(order_purchase_timestamp)      AS null_purchase,
+       COUNT(*) - COUNT(order_approved_at)             AS null_approved,
+       COUNT(*) - COUNT(order_delivered_carrier_date)  AS null_carrier,
+       COUNT(*) - COUNT(order_delivered_customer_date) AS null_delivered,
+       COUNT(*) - COUNT(order_estimated_delivery_date) AS null_estimated
+FROM dbo.orders;
+-- 99,441 | 0 | 160 | 1,783 | 2,965 | 0
+-- purchase and estimated dates are always set (NOT NULL in the table)
+-- the other gaps grow along the journey: orders that stop early (canceled, in transit)
+-- never get the later dates
