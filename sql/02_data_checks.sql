@@ -113,3 +113,27 @@ SELECT 'products' AS table_name, COUNT(*) AS rows_total, COUNT(DISTINCT product_
 UNION ALL SELECT 'sellers', COUNT(*), COUNT(DISTINCT seller_id) FROM dbo.sellers
 UNION ALL SELECT 'category_translation', COUNT(*), COUNT(DISTINCT product_category_name) FROM dbo.category_translation;
 -- all equal -> single-column keys
+
+
+/* ---------- Integrity: do the tables match each other? ----------
+   LEFT JOIN + IS NULL keeps the rows on the left that have no match on the right.
+*/
+
+-- Orders without any item line, by status
+SELECT o.order_status,
+       COUNT(*) AS orders_without_items
+FROM dbo.orders AS o
+LEFT JOIN dbo.order_items AS oi
+       ON oi.order_id = o.order_id
+WHERE oi.order_id IS NULL
+GROUP BY o.order_status
+ORDER BY orders_without_items DESC;
+-- unavailable 603 | canceled 164 | created 5 | invoiced 2 | shipped 1 (total 775)
+-- 767 are expected (never fulfilled); 3 invoiced/shipped orders without items are inconsistent
+
+-- Orders without a payment
+SELECT o.order_id, o.order_status, o.order_purchase_timestamp
+FROM dbo.orders AS o
+LEFT JOIN dbo.payments AS p
+       ON p.order_id = o.order_id
+WHERE p.order_id IS NULL;
