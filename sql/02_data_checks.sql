@@ -159,6 +159,7 @@ FROM dbo.order_items AS oi
 LEFT JOIN dbo.products AS p
        ON p.product_id = oi.product_id
 WHERE p.product_id IS NULL;
+-- 0
 
 -- Every seller in order_items exists in sellers
 SELECT COUNT(*) AS items_without_seller
@@ -166,6 +167,7 @@ FROM dbo.order_items AS oi
 LEFT JOIN dbo.sellers AS s
        ON s.seller_id = oi.seller_id
 WHERE s.seller_id IS NULL;
+-- 0
 
 -- Every order has a customer record
 SELECT COUNT(*) AS orders_without_customer
@@ -173,6 +175,7 @@ FROM dbo.orders AS o
 LEFT JOIN dbo.customers AS c
        ON c.customer_id = o.customer_id
 WHERE c.customer_id IS NULL;
+-- 0
 
 -- Product categories without an English name
 SELECT p.product_category_name,
@@ -183,3 +186,12 @@ LEFT JOIN dbo.category_translation AS ct
 WHERE ct.product_category_name IS NULL
 GROUP BY p.product_category_name
 ORDER BY products DESC;
+-- NULL 610 | portateis_cozinha_e_preparadores_de_alimentos 10 | pc_gamer 3
+-- 610 products have no category at all; 2 real categories are missing from the translation table
+
+/* Integrity summary
+   - Every item has a known product and seller; every order has a customer record.
+   - 775 orders have no items (767 unavailable or canceled), 1 delivered order has no payment,
+     768 orders have no review.
+   - 610 products have no category and 2 categories have no English name.
+*/
