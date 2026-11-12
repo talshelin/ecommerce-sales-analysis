@@ -311,3 +311,19 @@ FROM dbo.payments
 WHERE payment_installments = 0;
 -- 2 credit card payments with 0 installments and payment_sequential 2,
 -- while their orders have no payment 1 -> invalid records, 2 out of 103,886
+
+-- Product size: smallest values and impossible zero weights
+SELECT MIN(product_weight_g)                                 AS min_weight_g,
+       MIN(product_length_cm)                                AS min_length_cm,
+       MIN(product_height_cm)                                AS min_height_cm,
+       MIN(product_width_cm)                                 AS min_width_cm,
+       SUM(CASE WHEN product_weight_g = 0 THEN 1 ELSE 0 END) AS zero_weight_products
+FROM dbo.products;
+-- 0 | 7 | 2 | 6 | 4
+
+SELECT product_id, product_category_name, product_weight_g,
+       product_length_cm, product_height_cm, product_width_cm
+FROM dbo.products
+WHERE product_weight_g = 0;
+-- 4 products, all cama_mesa_banho (home textiles), all 30 x 25 x 30 cm, all sold by one seller
+-- -> a data entry error by one seller; weight is not used for revenue or delivery analysis
