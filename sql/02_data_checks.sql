@@ -327,3 +327,52 @@ FROM dbo.products
 WHERE product_weight_g = 0;
 -- 4 products, all cama_mesa_banho (home textiles), all 30 x 25 x 30 cm, all sold by one seller
 -- -> a data entry error by one seller; weight is not used for revenue or delivery analysis
+
+
+/* ---------- Coverage: which period does the data cover? ---------- */
+
+-- First and last order
+SELECT MIN(order_purchase_timestamp) AS first_order,
+       MAX(order_purchase_timestamp) AS last_order
+FROM dbo.orders;
+-- 2016-09-04 | 2018-10-17: 26 calendar months, 24 full months
+
+-- Orders per month
+-- DATETRUNC rounds a date down to the first day of its month
+SELECT DATETRUNC(month, order_purchase_timestamp) AS order_month,
+       COUNT(*)                                   AS orders
+FROM dbo.orders
+GROUP BY DATETRUNC(month, order_purchase_timestamp)
+ORDER BY order_month;
+-- 2016: 4 | 324 | (no Nov) | 1 -> very few orders while the platform was starting
+-- 2017-01 to 2018-08: 800 to 7,544 orders per month; peak in 2017-11 (Black Friday)
+-- 2018-09: 16 | 2018-10: 4, and 19 of these 20 orders are canceled -> end of the data export
+
+-- Months without any order
+-- GROUP BY cannot show a month that has no rows, so we first generate every month
+-- from the first to the last with a recursive CTE, then LEFT JOIN the monthly counts.
+WITH months AS (
+    -- start: first month (and the last month, to know where to stop)
+    SELECT DATETRUNC(month, MIN(order_purchase_timestamp)) AS month_start,
+           DATETRUNC(month, MAX(order_purchase_timestamp)) AS last_month
+    FROM dbo.orders
+    UNION ALL
+    -- next row: previous month + 1, until the last month
+    SELECT DATEADD(month, 1, month_start), last_month
+    FROM months
+    WHERE month_start < last_month
+),
+monthly_orders AS (
+    SELECT DATETRUNC(month, order_purchase_timestamp) AS order_month,
+           COUNT(*) AS orders
+    FROM dbo.orders
+    GROUP BY DATETRUNC(month, order_purchase_timestamp)
+)
+SELECT m.month_start,
+       COALESCE(mo.orders, 0) AS orders
+FROM months AS m
+LEFT JOIN monthly_orders AS mo
+       ON mo.order_month = m.month_start
+ORDER BY m.month_start;
+-- 26 months; 2016-11 has 0 orders
+-- reliable months for trends: 2017-01 to 2018-08 (20 months)
