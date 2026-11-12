@@ -285,3 +285,15 @@ ORDER BY payments DESC;
 -- debit_card 1,529 (0.22M) | not_defined 3 (0.00)
 -- not_defined is not a payment method: 3 payments with value 0
 -- vouchers are 5.6% of payments but 2.4% of the amount: small partial payments
+
+-- Review score distribution (scores in their natural order)
+SELECT review_score,
+       COUNT(*)                                                      AS reviews,
+       ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM dbo.reviews), 2) AS pct_reviews
+FROM dbo.reviews
+GROUP BY review_score
+ORDER BY review_score;
+-- 1: 11.51% | 2: 3.18% | 3: 8.24% | 4: 19.29% | 5: 57.78%
+-- all scores are between 1 and 5
+-- 1-star reviews outnumber 2 and 3 combined: unhappy customers go straight to 1,
+-- so an average score would hide them; report the 1-star share as well
