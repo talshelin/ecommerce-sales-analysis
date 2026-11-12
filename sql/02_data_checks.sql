@@ -255,3 +255,21 @@ SELECT COUNT(*) - COUNT(price)         AS null_price,
        COUNT(*) - COUNT(product_id)    AS null_product,
        COUNT(*) - COUNT(seller_id)     AS null_seller    FROM dbo.order_items;
 -- all 0
+
+
+/* ---------- Validity: are the values possible? ----------
+   Listing every value of a column shows values that should not be there.
+*/
+
+-- Order status distribution
+SELECT order_status,
+       COUNT(*)                                                    AS orders,
+       ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM dbo.orders), 2) AS pct_orders
+FROM dbo.orders
+GROUP BY order_status
+ORDER BY orders DESC;
+-- delivered 96,478 (97.02%) | shipped 1,107 | canceled 625 | unavailable 609
+-- invoiced 314 | processing 301 | created 5 | approved 2
+-- compared with the missing delivery dates by status:
+-- 625 canceled orders but only 619 without a delivery date
+-- -> 6 canceled orders have a delivery date (inconsistent)
