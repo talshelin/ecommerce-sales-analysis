@@ -297,3 +297,17 @@ ORDER BY review_score;
 -- all scores are between 1 and 5
 -- 1-star reviews outnumber 2 and 3 combined: unhappy customers go straight to 1,
 -- so an average score would hide them; report the 1-star share as well
+
+-- Installments: range and impossible values
+SELECT MIN(payment_installments)                                AS min_installments,
+       MAX(payment_installments)                                AS max_installments,
+       SUM(CASE WHEN payment_installments = 0 THEN 1 ELSE 0 END) AS zero_installments
+FROM dbo.payments;
+-- 0 | 24 | 2
+-- up to 24 installments is common for credit cards in Brazil; other payment types always use 1
+
+SELECT *
+FROM dbo.payments
+WHERE payment_installments = 0;
+-- 2 credit card payments with 0 installments and payment_sequential 2,
+-- while their orders have no payment 1 -> invalid records, 2 out of 103,886
