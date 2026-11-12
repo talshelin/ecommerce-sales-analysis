@@ -273,3 +273,15 @@ ORDER BY orders DESC;
 -- compared with the missing delivery dates by status:
 -- 625 canceled orders but only 619 without a delivery date
 -- -> 6 canceled orders have a delivery date (inconsistent)
+
+-- Payment type distribution: number of payments and amount paid
+SELECT payment_type,
+       COUNT(*)           AS payments,
+       SUM(payment_value) AS total_value
+FROM dbo.payments
+GROUP BY payment_type
+ORDER BY payments DESC;
+-- credit_card 76,795 (12.54M) | boleto 19,784 (2.87M) | voucher 5,775 (0.38M)
+-- debit_card 1,529 (0.22M) | not_defined 3 (0.00)
+-- not_defined is not a payment method: 3 payments with value 0
+-- vouchers are 5.6% of payments but 2.4% of the amount: small partial payments
