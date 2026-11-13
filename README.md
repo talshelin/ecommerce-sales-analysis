@@ -26,4 +26,8 @@ Run in order:
 | File | Content |
 |---|---|
 | `sql/01_create_tables.sql` | Database and table definitions, row count check |
-| `sql/02_data_checks.sql` | Grain and key checks for every table |
+| `sql/02_data_checks.sql` | Data checks: keys, links, missing and invalid values, period, outliers, consistency |
+
+## Data checks and decisions
+
+What was checked, what was found and what was decided: [docs/decision_log.md](docs/decision_log.md)
