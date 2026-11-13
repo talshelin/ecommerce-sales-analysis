@@ -376,3 +376,43 @@ LEFT JOIN monthly_orders AS mo
 ORDER BY m.month_start;
 -- 26 months; 2016-11 has 0 orders
 -- reliable months for trends: 2017-01 to 2018-08 (20 months)
+
+
+/* ---------- Outliers: are extreme values real or errors? ----------
+   Mean vs median: when the mean is well above the median, a few large values
+   pull it up (right-skewed). PERCENTILE_CONT is a window function: it writes the
+   result on every row, so DISTINCT keeps one row.
+*/
+
+-- Item price
+SELECT MIN(price)                                AS min_price,
+       MAX(price)                                AS max_price,
+       AVG(price)                                AS avg_price,
+       SUM(CASE WHEN price <= 0 THEN 1 ELSE 0 END) AS zero_or_negative_price
+FROM dbo.order_items;
+-- 0.85 | 6,735.00 | 120.65 | 0
+
+SELECT DISTINCT
+       PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY price) OVER () AS median_price,
+       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY price) OVER () AS p99_price
+FROM dbo.order_items;
+-- 74.99 | 890
+-- mean is 1.6x the median: most items are cheap, a few expensive ones pull the mean up
+-- -> report the median as the typical item price
+
+-- Freight value
+SELECT MIN(freight_value)                                 AS min_freight,
+       MAX(freight_value)                                 AS max_freight,
+       AVG(freight_value)                                 AS avg_freight,
+       SUM(CASE WHEN freight_value = 0 THEN 1 ELSE 0 END) AS zero_freight,
+       ROUND(100.0 * SUM(CASE WHEN freight_value = 0 THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_zero_freight
+FROM dbo.order_items;
+-- 0.00 | 409.68 | 19.99 | 383 | 0.34%
+-- min is 0, so there are no negative values; free shipping (0) is valid but rare
+
+SELECT DISTINCT
+       PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY freight_value) OVER () AS median_freight,
+       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY freight_value) OVER () AS p99_freight
+FROM dbo.order_items;
+-- 16.26 | 84.52
+-- mean is 1.2x the median: right-skewed, but less than prices
