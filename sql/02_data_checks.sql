@@ -495,3 +495,14 @@ GROUP BY CASE
 ORDER BY orders DESC;
 -- match 98,416 (99.75%) | paid more 232 | paid less 17 | no payment 1 (total 98,666)
 -- the two tables agree for almost every order
+
+-- Are the order dates in a logical order?
+-- (a comparison with a NULL date is unknown, so CASE counts it as 0)
+SELECT SUM(CASE WHEN order_approved_at             < order_purchase_timestamp     THEN 1 ELSE 0 END) AS approved_before_purchase,
+       SUM(CASE WHEN order_delivered_carrier_date  < order_approved_at            THEN 1 ELSE 0 END) AS carrier_before_approved,
+       SUM(CASE WHEN order_delivered_customer_date < order_delivered_carrier_date THEN 1 ELSE 0 END) AS delivered_before_carrier,
+       SUM(CASE WHEN order_delivered_customer_date < order_purchase_timestamp     THEN 1 ELSE 0 END) AS delivered_before_purchase
+FROM dbo.orders;
+-- 0 | 1,359 | 23 | 0
+-- no order is delivered before it was placed -> total delivery time is never negative
+-- 1,359 + 23 orders have steps out of order; they only affect step-by-step durations
