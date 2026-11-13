@@ -1,125 +1,39 @@
 /* 02_data_checks.sql
-   Checks what one row means in each table and which columns identify a row.
+   Data checks before the analysis: keys, links between tables, missing values,
+   invalid values, period covered, outliers and consistency.
 */
 
 USE Olist;
 GO
 
-/* ---------- Grain: what does one row represent? ---------- */
 
--- One row = one order
-SELECT TOP 10 * FROM dbo.orders;
+/* ===== Keys ===== */
 
--- One row = one item line in an order (no quantity column: 3 units = 3 rows)
-SELECT TOP 10 * FROM dbo.order_items;
-
--- Example: an order with 3 or more item lines
-SELECT order_id, order_item_id, product_id, price
+-- Which columns identify a row in the tables without a primary key?
+SELECT 'order_items' AS table_name,
+       COUNT(*) AS row_count,
+       COUNT(DISTINCT CONCAT(order_id, '-', order_item_id)) AS unique_keys
 FROM dbo.order_items
-WHERE order_id = (SELECT TOP 1 order_id FROM dbo.order_items WHERE order_item_id = 3)
-ORDER BY order_item_id;
-
--- One row = the customer record of one order.
--- A new customer_id is created for every order; the person is customer_unique_id.
-SELECT TOP 10 * FROM dbo.customers;
-
--- Example: one person with 3 or more customer_ids
-SELECT customer_unique_id, customer_id, customer_city
-FROM dbo.customers
-WHERE customer_unique_id = (SELECT TOP 1 customer_unique_id
-                            FROM dbo.customers
-                            GROUP BY customer_unique_id
-                            HAVING COUNT(*) >= 3);
-
--- One row = one payment of an order (e.g. credit card + voucher)
-SELECT TOP 10 * FROM dbo.payments;
-
--- Example: an order paid in 2 or more parts
-SELECT order_id, payment_sequential, payment_type, payment_value
+UNION ALL
+SELECT 'payments', COUNT(*), COUNT(DISTINCT CONCAT(order_id, '-', payment_sequential))
 FROM dbo.payments
-WHERE order_id = (SELECT TOP 1 order_id FROM dbo.payments WHERE payment_sequential = 2)
-ORDER BY payment_sequential;
-
--- One row = one review linked to an order
-SELECT TOP 10 * FROM dbo.reviews;
-
--- Example: an order with more than one review
-SELECT order_id, review_id, review_score, review_creation_date
-FROM dbo.reviews
-WHERE order_id = (SELECT TOP 1 order_id
-                  FROM dbo.reviews
-                  GROUP BY order_id
-                  HAVING COUNT(*) > 1);
-
--- One row = one product / one seller / one category
-SELECT TOP 10 * FROM dbo.products;
-SELECT TOP 10 * FROM dbo.sellers;
-SELECT TOP 10 * FROM dbo.category_translation;
-
-
-/* ---------- Keys: which columns identify a row? ----------
-   A column is a key when COUNT(*) = COUNT(DISTINCT column).
-   For two columns: COUNT(DISTINCT CONCAT(a, '-', b)).
-*/
-
--- orders: order_id
-SELECT COUNT(*)                 AS rows_total,
-       COUNT(DISTINCT order_id) AS unique_orders
-FROM dbo.orders;
--- 99,441 = 99,441 -> key
-
--- order_items: order_id + order_item_id
-SELECT COUNT(*)                                             AS rows_total,
-       COUNT(DISTINCT order_id)                             AS unique_orders,
-       COUNT(DISTINCT CONCAT(order_id, '-', order_item_id)) AS unique_pairs
-FROM dbo.order_items;
--- 112,650 rows = 112,650 pairs -> key
--- 98,666 orders vs 99,441 in orders -> 775 orders have no items
-
--- customers: customer_id vs customer_unique_id
-SELECT COUNT(*)                           AS rows_total,
-       COUNT(DISTINCT customer_id)        AS unique_customer_ids,
-       COUNT(DISTINCT customer_unique_id) AS unique_persons
-FROM dbo.customers;
--- 99,441 customer_ids, 96,096 persons -> customers are counted by customer_unique_id
-
--- payments: order_id + payment_sequential
-SELECT COUNT(*)                                                  AS rows_total,
-       COUNT(DISTINCT order_id)                                  AS unique_orders,
-       COUNT(DISTINCT CONCAT(order_id, '-', payment_sequential)) AS unique_pairs
-FROM dbo.payments;
--- 103,886 rows = 103,886 pairs -> key
--- 99,440 orders vs 99,441 in orders -> 1 order has no payment
-
--- reviews: neither column alone is a key
-SELECT COUNT(*)                                         AS rows_total,
-       COUNT(DISTINCT review_id)                        AS unique_review_ids,
-       COUNT(DISTINCT order_id)                         AS unique_orders,
-       COUNT(DISTINCT CONCAT(review_id, '-', order_id)) AS unique_pairs
+UNION ALL
+SELECT 'reviews', COUNT(*), COUNT(DISTINCT CONCAT(review_id, '-', order_id))
 FROM dbo.reviews;
--- 99,224 rows = 99,224 pairs -> review_id + order_id is the key
--- the same review can belong to several orders, and an order can have several reviews
+-- All three match: order_id + order_item_id, order_id + payment_sequential
+-- and review_id + order_id are the keys.
 
--- Example: one review linked to several orders
-SELECT review_id, order_id, review_score
-FROM dbo.reviews
-WHERE review_id = (SELECT TOP 1 review_id
-                   FROM dbo.reviews
-                   GROUP BY review_id
-                   HAVING COUNT(DISTINCT order_id) > 1);
-
--- products, sellers, category_translation
-SELECT 'products' AS table_name, COUNT(*) AS rows_total, COUNT(DISTINCT product_id) AS unique_keys FROM dbo.products
-UNION ALL SELECT 'sellers', COUNT(*), COUNT(DISTINCT seller_id) FROM dbo.sellers
-UNION ALL SELECT 'category_translation', COUNT(*), COUNT(DISTINCT product_category_name) FROM dbo.category_translation;
--- all equal -> single-column keys
+-- How many real customers are there?
+SELECT COUNT(DISTINCT customer_id)        AS customer_ids,
+       COUNT(DISTINCT customer_unique_id) AS customers
+FROM dbo.customers;
+-- 99,441 customer_ids but 96,096 people: a new customer_id is created for every order,
+-- so customers are counted with customer_unique_id.
 
 
-/* ---------- Integrity: do the tables match each other? ----------
-   LEFT JOIN + IS NULL keeps the rows on the left that have no match on the right.
-*/
+/* ===== Links between tables ===== */
 
--- Orders without any item line, by status
+-- Orders without any item, by status
 SELECT o.order_status,
        COUNT(*) AS orders_without_items
 FROM dbo.orders AS o
@@ -128,54 +42,14 @@ LEFT JOIN dbo.order_items AS oi
 WHERE oi.order_id IS NULL
 GROUP BY o.order_status
 ORDER BY orders_without_items DESC;
--- unavailable 603 | canceled 164 | created 5 | invoiced 2 | shipped 1 (total 775)
--- 767 are expected (never fulfilled); 3 invoiced/shipped orders without items are inconsistent
+-- 775 orders, almost all unavailable (603) or canceled (164): orders that never happened.
 
--- Orders without a payment
-SELECT o.order_id, o.order_status, o.order_purchase_timestamp
-FROM dbo.orders AS o
-LEFT JOIN dbo.payments AS p
-       ON p.order_id = o.order_id
-WHERE p.order_id IS NULL;
--- 1 order: delivered, 2016-09-15 (the first weeks of the data)
--- inconsistent (a delivered order should be paid), but a single row
-
--- Orders without a review, by status
-SELECT o.order_status,
-       COUNT(*) AS orders_without_review
-FROM dbo.orders AS o
-LEFT JOIN dbo.reviews AS r
-       ON r.order_id = o.order_id
-WHERE r.order_id IS NULL
-GROUP BY o.order_status
-ORDER BY orders_without_review DESC;
--- delivered 646 | shipped 75 | canceled 20 | unavailable 14 | processing 6 | invoiced 5 | created 2
--- total 768 = 99,441 orders - 98,673 orders in reviews
--- reviews are optional, so this is expected; review scores describe only reviewed orders
-
--- Every product in order_items exists in products
-SELECT COUNT(*) AS items_without_product
-FROM dbo.order_items AS oi
-LEFT JOIN dbo.products AS p
-       ON p.product_id = oi.product_id
-WHERE p.product_id IS NULL;
--- 0
-
--- Every seller in order_items exists in sellers
-SELECT COUNT(*) AS items_without_seller
-FROM dbo.order_items AS oi
-LEFT JOIN dbo.sellers AS s
-       ON s.seller_id = oi.seller_id
-WHERE s.seller_id IS NULL;
--- 0
-
--- Every order has a customer record
-SELECT COUNT(*) AS orders_without_customer
-FROM dbo.orders AS o
-LEFT JOIN dbo.customers AS c
-       ON c.customer_id = o.customer_id
-WHERE c.customer_id IS NULL;
--- 0
+-- Orders without a payment or a review
+SELECT (SELECT COUNT(*) FROM dbo.orders AS o
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.payments AS p WHERE p.order_id = o.order_id)) AS orders_without_payment,
+       (SELECT COUNT(*) FROM dbo.orders AS o
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.reviews AS r WHERE r.order_id = o.order_id))  AS orders_without_review;
+-- 1 order has no payment. 768 orders have no review, which is normal: reviews are optional.
 
 -- Product categories without an English name
 SELECT p.product_category_name,
@@ -186,178 +60,69 @@ LEFT JOIN dbo.category_translation AS ct
 WHERE ct.product_category_name IS NULL
 GROUP BY p.product_category_name
 ORDER BY products DESC;
--- NULL 610 | portateis_cozinha_e_preparadores_de_alimentos 10 | pc_gamer 3
--- 610 products have no category at all; 2 real categories are missing from the translation table
-
-/* Integrity summary
-   - Every item has a known product and seller; every order has a customer record.
-   - 775 orders have no items (767 unavailable or canceled), 1 delivered order has no payment,
-     768 orders have no review.
-   - 610 products have no category and 2 categories have no English name.
-*/
+-- 610 products have no category at all; 2 small categories (13 products) have no translation.
+-- Every product, seller and customer in the other tables exists in its own table.
 
 
-/* ---------- Completeness: where are values missing, and why? ----------
-   COUNT(column) skips NULLs, so COUNT(*) - COUNT(column) = number of NULLs.
-*/
+/* ===== Missing values ===== */
 
--- orders: missing dates, in the order of the order journey
-SELECT COUNT(*)                                        AS total_orders,
-       COUNT(*) - COUNT(order_purchase_timestamp)      AS null_purchase,
-       COUNT(*) - COUNT(order_approved_at)             AS null_approved,
-       COUNT(*) - COUNT(order_delivered_carrier_date)  AS null_carrier,
-       COUNT(*) - COUNT(order_delivered_customer_date) AS null_delivered,
-       COUNT(*) - COUNT(order_estimated_delivery_date) AS null_estimated
+-- Missing order dates, in the order of the order journey
+SELECT COUNT(*) - COUNT(order_purchase_timestamp)      AS no_purchase_date,
+       COUNT(*) - COUNT(order_approved_at)             AS no_approval_date,
+       COUNT(*) - COUNT(order_delivered_carrier_date)  AS no_carrier_date,
+       COUNT(*) - COUNT(order_delivered_customer_date) AS no_delivery_date,
+       COUNT(*) - COUNT(order_estimated_delivery_date) AS no_estimated_date
 FROM dbo.orders;
--- 99,441 | 0 | 160 | 1,783 | 2,965 | 0
--- purchase and estimated dates are always set (NOT NULL in the table)
--- the other gaps grow along the journey: orders that stop early (canceled, in transit)
--- never get the later dates
+-- 0 | 160 | 1,783 | 2,965 | 0
+-- The gaps grow along the journey: canceled orders and orders still on the way
+-- never get the later dates, so most gaps are expected.
 
--- orders without a delivery date, by status
-SELECT order_status,
-       COUNT(*) AS orders_without_delivery_date
-FROM dbo.orders
-WHERE order_delivered_customer_date IS NULL
-GROUP BY order_status
-ORDER BY orders_without_delivery_date DESC;
--- shipped 1,107 | canceled 619 | unavailable 609 | invoiced 314 | processing 301
--- created 5 | delivered 8 | approved 2 (total 2,965)
--- 2,957 are expected (the order never reached the customer);
--- 8 delivered orders have no delivery date -> cannot be used for delivery time
-
--- reviews: share of reviews without a text message
--- 100.0 avoids integer division; the brackets make the subtraction happen first
-SELECT COUNT(*)                                                      AS total_reviews,
-       COUNT(*) - COUNT(review_comment_message)                      AS reviews_without_text,
-       100.0 * (COUNT(*) - COUNT(review_comment_message)) / COUNT(*) AS pct_without_text
+-- Reviews without a text message
+SELECT ROUND(100.0 * (COUNT(*) - COUNT(review_comment_message)) / COUNT(*), 1) AS pct_reviews_without_text
 FROM dbo.reviews;
--- 99,224 | 58,256 | 58.7%
--- most reviews have only a score -> satisfaction is measured with review_score
-
--- products: missing category and size information
-SELECT COUNT(*)                                 AS total_products,
-       COUNT(*) - COUNT(product_category_name)  AS null_category,
-       COUNT(*) - COUNT(product_photos_qty)     AS null_photos,
-       COUNT(*) - COUNT(product_weight_g)       AS null_weight
-FROM dbo.products;
--- 32,951 | 610 | 610 | 2
--- the same 610 products have no category, name length, description length or photo count
-
--- Columns used in the analysis: no missing values expected
-SELECT COUNT(*) - COUNT(review_score)  AS null_review_score  FROM dbo.reviews;
-SELECT COUNT(*) - COUNT(payment_type)  AS null_payment_type,
-       COUNT(*) - COUNT(payment_value) AS null_payment_value FROM dbo.payments;
-SELECT COUNT(*) - COUNT(customer_unique_id) AS null_person,
-       COUNT(*) - COUNT(customer_state)     AS null_state    FROM dbo.customers;
-SELECT COUNT(*) - COUNT(price)         AS null_price,
-       COUNT(*) - COUNT(freight_value) AS null_freight,
-       COUNT(*) - COUNT(product_id)    AS null_product,
-       COUNT(*) - COUNT(seller_id)     AS null_seller    FROM dbo.order_items;
--- all 0
+-- 58.7%: most customers leave only a score, so satisfaction is measured with review_score.
 
 
-/* ---------- Validity: are the values possible? ----------
-   Listing every value of a column shows values that should not be there.
-*/
+/* ===== Invalid values ===== */
 
--- Order status distribution
+-- Order status
 SELECT order_status,
-       COUNT(*)                                                    AS orders,
+       COUNT(*) AS orders,
        ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM dbo.orders), 2) AS pct_orders
 FROM dbo.orders
 GROUP BY order_status
 ORDER BY orders DESC;
--- delivered 96,478 (97.02%) | shipped 1,107 | canceled 625 | unavailable 609
--- invoiced 314 | processing 301 | created 5 | approved 2
--- compared with the missing delivery dates by status:
--- 625 canceled orders but only 619 without a delivery date
--- -> 6 canceled orders have a delivery date (inconsistent)
+-- 97% of orders are delivered; the rest are shipped, canceled, unavailable or still in process.
 
--- Payment type distribution: number of payments and amount paid
+-- Payment type
 SELECT payment_type,
        COUNT(*)           AS payments,
        SUM(payment_value) AS total_value
 FROM dbo.payments
 GROUP BY payment_type
 ORDER BY payments DESC;
--- credit_card 76,795 (12.54M) | boleto 19,784 (2.87M) | voucher 5,775 (0.38M)
--- debit_card 1,529 (0.22M) | not_defined 3 (0.00)
--- not_defined is not a payment method: 3 payments with value 0
--- vouchers are 5.6% of payments but 2.4% of the amount: small partial payments
+-- Credit card is 74% of payments. "not_defined" is not a real method: 3 payments of 0.
 
--- Review score distribution (scores in their natural order)
+-- Review score
 SELECT review_score,
-       COUNT(*)                                                      AS reviews,
+       COUNT(*) AS reviews,
        ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM dbo.reviews), 2) AS pct_reviews
 FROM dbo.reviews
 GROUP BY review_score
 ORDER BY review_score;
--- 1: 11.51% | 2: 3.18% | 3: 8.24% | 4: 19.29% | 5: 57.78%
--- all scores are between 1 and 5
--- 1-star reviews outnumber 2 and 3 combined: unhappy customers go straight to 1,
--- so an average score would hide them; report the 1-star share as well
-
--- Installments: range and impossible values
-SELECT MIN(payment_installments)                                AS min_installments,
-       MAX(payment_installments)                                AS max_installments,
-       SUM(CASE WHEN payment_installments = 0 THEN 1 ELSE 0 END) AS zero_installments
-FROM dbo.payments;
--- 0 | 24 | 2
--- up to 24 installments is common for credit cards in Brazil; other payment types always use 1
-
-SELECT *
-FROM dbo.payments
-WHERE payment_installments = 0;
--- 2 credit card payments with 0 installments and payment_sequential 2,
--- while their orders have no payment 1 -> invalid records, 2 out of 103,886
-
--- Product size: smallest values and impossible zero weights
-SELECT MIN(product_weight_g)                                 AS min_weight_g,
-       MIN(product_length_cm)                                AS min_length_cm,
-       MIN(product_height_cm)                                AS min_height_cm,
-       MIN(product_width_cm)                                 AS min_width_cm,
-       SUM(CASE WHEN product_weight_g = 0 THEN 1 ELSE 0 END) AS zero_weight_products
-FROM dbo.products;
--- 0 | 7 | 2 | 6 | 4
-
-SELECT product_id, product_category_name, product_weight_g,
-       product_length_cm, product_height_cm, product_width_cm
-FROM dbo.products
-WHERE product_weight_g = 0;
--- 4 products, all cama_mesa_banho (home textiles), all 30 x 25 x 30 cm, all sold by one seller
--- -> a data entry error by one seller; weight is not used for revenue or delivery analysis
+-- All scores are 1-5. 58% give 5, but 11.5% give 1: more than 2 and 3 together,
+-- so an average score would hide the unhappy customers.
 
 
-/* ---------- Coverage: which period does the data cover? ---------- */
+/* ===== Period covered ===== */
 
--- First and last order
-SELECT MIN(order_purchase_timestamp) AS first_order,
-       MAX(order_purchase_timestamp) AS last_order
-FROM dbo.orders;
--- 2016-09-04 | 2018-10-17: 26 calendar months, 24 full months
-
--- Orders per month
--- DATETRUNC rounds a date down to the first day of its month
-SELECT DATETRUNC(month, order_purchase_timestamp) AS order_month,
-       COUNT(*)                                   AS orders
-FROM dbo.orders
-GROUP BY DATETRUNC(month, order_purchase_timestamp)
-ORDER BY order_month;
--- 2016: 4 | 324 | (no Nov) | 1 -> very few orders while the platform was starting
--- 2017-01 to 2018-08: 800 to 7,544 orders per month; peak in 2017-11 (Black Friday)
--- 2018-09: 16 | 2018-10: 4, and 19 of these 20 orders are canceled -> end of the data export
-
--- Months without any order
--- GROUP BY cannot show a month that has no rows, so we first generate every month
--- from the first to the last with a recursive CTE, then LEFT JOIN the monthly counts.
+-- Orders per month, including months without any order
+-- (a recursive CTE builds the full list of months, then the counts are joined to it)
 WITH months AS (
-    -- start: first month (and the last month, to know where to stop)
     SELECT DATETRUNC(month, MIN(order_purchase_timestamp)) AS month_start,
            DATETRUNC(month, MAX(order_purchase_timestamp)) AS last_month
     FROM dbo.orders
     UNION ALL
-    -- next row: previous month + 1, until the last month
     SELECT DATEADD(month, 1, month_start), last_month
     FROM months
     WHERE month_start < last_month
@@ -368,111 +133,71 @@ monthly_orders AS (
     FROM dbo.orders
     GROUP BY DATETRUNC(month, order_purchase_timestamp)
 )
-SELECT m.month_start,
+SELECT m.month_start AS order_month,
        COALESCE(mo.orders, 0) AS orders
 FROM months AS m
 LEFT JOIN monthly_orders AS mo
        ON mo.order_month = m.month_start
 ORDER BY m.month_start;
--- 26 months; 2016-11 has 0 orders
--- reliable months for trends: 2017-01 to 2018-08 (20 months)
+-- Data runs from Sep 2016 to Oct 2018. 2016 has very few orders (none in Nov 2016),
+-- and Sep-Oct 2018 have only 20, almost all canceled.
+-- Months used for trends: Jan 2017 to Aug 2018. Nov 2017 peaks because of Black Friday.
 
 
-/* ---------- Outliers: are extreme values real or errors? ----------
-   Mean vs median: when the mean is well above the median, a few large values
-   pull it up (right-skewed). PERCENTILE_CONT is a window function: it writes the
-   result on every row, so DISTINCT keeps one row.
-*/
+/* ===== Outliers ===== */
 
--- Item price
-SELECT MIN(price)                                AS min_price,
-       MAX(price)                                AS max_price,
-       AVG(price)                                AS avg_price,
-       SUM(CASE WHEN price <= 0 THEN 1 ELSE 0 END) AS zero_or_negative_price
-FROM dbo.order_items;
--- 0.85 | 6,735.00 | 120.65 | 0
+-- Price, freight and payment value: typical value vs extremes
+SELECT DISTINCT 'price' AS measure,
+       MIN(price) OVER () AS min_value,
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER () AS median_value,
+       AVG(price) OVER () AS avg_value,
+       MAX(price) OVER () AS max_value
+FROM dbo.order_items
+UNION ALL
+SELECT DISTINCT 'freight',
+       MIN(freight_value) OVER (),
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY freight_value) OVER (),
+       AVG(freight_value) OVER (),
+       MAX(freight_value) OVER ()
+FROM dbo.order_items
+UNION ALL
+SELECT DISTINCT 'payment',
+       MIN(payment_value) OVER (),
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY payment_value) OVER (),
+       AVG(payment_value) OVER (),
+       MAX(payment_value) OVER ()
+FROM dbo.payments;
+-- Price: median 75, average 121, max 6,735. Freight: median 16, average 20.
+-- Payment: median 100, average 154. All three are pulled up by a few large values,
+-- so the median is used as the typical value.
 
-SELECT DISTINCT
-       PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY price) OVER () AS median_price,
-       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY price) OVER () AS p99_price
-FROM dbo.order_items;
--- 74.99 | 890
--- mean is 1.6x the median: most items are cheap, a few expensive ones pull the mean up
--- -> report the median as the typical item price
-
--- Freight value
-SELECT MIN(freight_value)                                 AS min_freight,
-       MAX(freight_value)                                 AS max_freight,
-       AVG(freight_value)                                 AS avg_freight,
-       SUM(CASE WHEN freight_value = 0 THEN 1 ELSE 0 END) AS zero_freight,
-       ROUND(100.0 * SUM(CASE WHEN freight_value = 0 THEN 1 ELSE 0 END) / COUNT(*), 2) AS pct_zero_freight
-FROM dbo.order_items;
--- 0.00 | 409.68 | 19.99 | 383 | 0.34%
--- min is 0, so there are no negative values; free shipping (0) is valid but rare
-
-SELECT DISTINCT
-       PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY freight_value) OVER () AS median_freight,
-       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY freight_value) OVER () AS p99_freight
-FROM dbo.order_items;
--- 16.26 | 84.52
--- mean is 1.2x the median: right-skewed, but less than prices
-
--- The 10 most expensive items: real products or errors?
+-- The 10 most expensive items
 SELECT TOP 10
-       p.product_category_name,
-       ct.product_category_name_english,
+       COALESCE(ct.product_category_name_english, p.product_category_name) AS category,
        o.order_status,
        oi.price
 FROM dbo.order_items AS oi
-JOIN dbo.products AS p
-     ON p.product_id = oi.product_id
-JOIN dbo.orders AS o
-     ON o.order_id = oi.order_id
-LEFT JOIN dbo.category_translation AS ct   -- LEFT: some products have no translated category
-     ON ct.product_category_name = p.product_category_name
+JOIN dbo.products AS p ON p.product_id = oi.product_id
+JOIN dbo.orders   AS o ON o.order_id   = oi.order_id
+LEFT JOIN dbo.category_translation AS ct
+       ON ct.product_category_name = p.product_category_name
 ORDER BY oi.price DESC;
--- housewares, computers, art, small appliances, musical instruments, consoles,
--- sports, watches: all delivered -> real purchases, kept in the analysis
-
--- Payment value
-SELECT MIN(payment_value) AS min_payment,
-       MAX(payment_value) AS max_payment,
-       AVG(payment_value) AS avg_payment
-FROM dbo.payments;
--- 0.00 | 13,664.08 | 154.10
-
-SELECT DISTINCT
-       PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY payment_value) OVER () AS median_payment,
-       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY payment_value) OVER () AS p99_payment
-FROM dbo.payments;
--- 100 | 1,039.92
--- mean is 1.5x the median; the largest payment is above the most expensive item
--- because one payment can cover a whole order (several items + freight)
-
--- Payments with value 0, by type
-SELECT payment_type,
-       COUNT(*) AS payments
-FROM dbo.payments
-WHERE payment_value = 0
-GROUP BY payment_type
-ORDER BY payments DESC;
--- voucher 6 | not_defined 3 (out of 103,886)
+-- Computers, appliances, art, instruments, consoles; all delivered.
+-- These are real purchases, so they stay in the analysis.
 
 
-/* ---------- Consistency: do related tables and columns agree? ---------- */
+/* ===== Consistency ===== */
 
 -- Do items (price + freight) match payments for each order?
--- Both tables are 1:N to orders, so each is first summarised to one row per order,
--- then joined. Joining the raw tables would multiply rows (fan-out).
+-- Each table is first summarised to one row per order, then joined,
+-- so that orders with several items and several payments are not counted twice.
 WITH items_per_order AS (
-    SELECT order_id,
-           SUM(price + freight_value) AS items_total
+    SELECT order_id, SUM(price + freight_value) AS items_total
     FROM dbo.order_items
     GROUP BY order_id
 ),
 payments_per_order AS (
-    SELECT order_id,
-           SUM(payment_value) AS payments_total
+    SELECT order_id, SUM(payment_value) AS payments_total
     FROM dbo.payments
     GROUP BY order_id
 )
@@ -493,27 +218,22 @@ GROUP BY CASE
            ELSE                                                  'paid less'
        END
 ORDER BY orders DESC;
--- match 98,416 (99.75%) | paid more 232 | paid less 17 | no payment 1 (total 98,666)
--- the two tables agree for almost every order
+-- 99.75% of orders match within 1 BRL. The two tables agree.
 
 -- Are the order dates in a logical order?
--- (a comparison with a NULL date is unknown, so CASE counts it as 0)
 SELECT SUM(CASE WHEN order_approved_at             < order_purchase_timestamp     THEN 1 ELSE 0 END) AS approved_before_purchase,
        SUM(CASE WHEN order_delivered_carrier_date  < order_approved_at            THEN 1 ELSE 0 END) AS carrier_before_approved,
        SUM(CASE WHEN order_delivered_customer_date < order_delivered_carrier_date THEN 1 ELSE 0 END) AS delivered_before_carrier,
        SUM(CASE WHEN order_delivered_customer_date < order_purchase_timestamp     THEN 1 ELSE 0 END) AS delivered_before_purchase
 FROM dbo.orders;
 -- 0 | 1,359 | 23 | 0
--- no order is delivered before it was placed -> total delivery time is never negative
--- 1,359 + 23 orders have steps out of order; they only affect step-by-step durations
+-- No order is delivered before it was placed, so delivery time is never negative.
 
 -- Does the status agree with the dates?
 SELECT SUM(CASE WHEN order_status = 'delivered' AND order_delivered_customer_date IS NULL     THEN 1 ELSE 0 END) AS delivered_without_delivery_date,
        SUM(CASE WHEN order_status = 'delivered' AND order_approved_at IS NULL                 THEN 1 ELSE 0 END) AS delivered_without_approval_date,
        SUM(CASE WHEN order_status = 'delivered' AND order_delivered_carrier_date IS NULL      THEN 1 ELSE 0 END) AS delivered_without_carrier_date,
-       SUM(CASE WHEN order_status = 'canceled'  AND order_delivered_customer_date IS NOT NULL THEN 1 ELSE 0 END) AS canceled_with_delivery_date,
-       SUM(CASE WHEN order_status = 'shipped'   AND order_delivered_carrier_date IS NULL      THEN 1 ELSE 0 END) AS shipped_without_carrier_date
+       SUM(CASE WHEN order_status = 'canceled'  AND order_delivered_customer_date IS NOT NULL THEN 1 ELSE 0 END) AS canceled_with_delivery_date
 FROM dbo.orders;
--- 8 | 14 | 2 | 6 | 0
--- 30 orders in total out of 99,441: delivered orders with missing dates stay in revenue
--- but not in delivery time; canceled orders with a delivery date stay out of both
+-- 8 | 14 | 2 | 6: 30 orders in total. They stay in the data and are left out
+-- only of the measures they would distort (e.g. delivery time).
