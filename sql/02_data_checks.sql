@@ -506,3 +506,14 @@ FROM dbo.orders;
 -- 0 | 1,359 | 23 | 0
 -- no order is delivered before it was placed -> total delivery time is never negative
 -- 1,359 + 23 orders have steps out of order; they only affect step-by-step durations
+
+-- Does the status agree with the dates?
+SELECT SUM(CASE WHEN order_status = 'delivered' AND order_delivered_customer_date IS NULL     THEN 1 ELSE 0 END) AS delivered_without_delivery_date,
+       SUM(CASE WHEN order_status = 'delivered' AND order_approved_at IS NULL                 THEN 1 ELSE 0 END) AS delivered_without_approval_date,
+       SUM(CASE WHEN order_status = 'delivered' AND order_delivered_carrier_date IS NULL      THEN 1 ELSE 0 END) AS delivered_without_carrier_date,
+       SUM(CASE WHEN order_status = 'canceled'  AND order_delivered_customer_date IS NOT NULL THEN 1 ELSE 0 END) AS canceled_with_delivery_date,
+       SUM(CASE WHEN order_status = 'shipped'   AND order_delivered_carrier_date IS NULL      THEN 1 ELSE 0 END) AS shipped_without_carrier_date
+FROM dbo.orders;
+-- 8 | 14 | 2 | 6 | 0
+-- 30 orders in total out of 99,441: delivered orders with missing dates stay in revenue
+-- but not in delivery time; canceled orders with a delivery date stay out of both
