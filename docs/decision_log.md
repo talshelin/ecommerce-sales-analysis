@@ -1,158 +1,162 @@
 # Data Checks and Decisions
 
-Before answering any business question, the data was checked to see how far it can be trusted. This page explains **what was checked, what was found and what was decided**.
-
-Every decision is written in three parts: **what** was decided, **why**, and **what it changes**. You don't need a data background to follow them. The *Technical detail* sections are for analysts. The queries are in [`sql/02_data_checks.sql`](../sql/02_data_checks.sql).
+Before the analysis, the data was checked to see how far it can be trusted. Each section below shows **the query**, **what was found** and **why it matters**. Full queries: [`sql/02_data_checks.sql`](../sql/02_data_checks.sql).
 
 > [!IMPORTANT]
-> **Verdict: the data is reliable for this analysis.**
-> The problems found are small (each under 1% of orders) and appear in specific places. No raw data is deleted. Problem records are flagged and left out only of the measures they would distort.
+> **Verdict: the data is reliable.** Problems are small and appear in specific places. No raw data is deleted. Problem records are left out only of the measures they would distort.
+
+| | Check | Result |
+|---|---|---|
+| 🟦 | [Keys](#-1-keys) | Customers must be counted as people, not IDs |
+| 🟪 | [Links between tables](#-2-links-between-tables) | 775 orders have no items: canceled or unavailable |
+| 🟨 | [Missing values](#-3-missing-values) | Missing dates are expected |
+| 🟥 | [Invalid values](#-4-invalid-values) | Unhappy customers give 1 star, not 2 or 3 |
+| 🟩 | [Period covered](#-5-period-covered) | Trends use Jan 2017 to Aug 2018 |
+| 🟧 | [Outliers](#-6-outliers) | Extreme prices are real; the median is used |
+| 🟫 | [Consistency](#-7-consistency) | Payments and items agree in 99.75% of orders |
 
 ---
 
-## At a glance
+## 🟦 1. Keys
 
-| | Check | Question | Result | |
-|---|---|---|---|:---:|
-| 🔑 | **Keys** | What makes each row unique? | Every table has a clear key | ✅ |
-| 🔗 | **Links** | Do the tables match each other? | 775 orders have no items; almost all were canceled or unavailable | ✅ |
-| ⬜ | **Missing values** | Where are values missing, and why? | Missing dates follow the order journey: canceled orders never get a delivery date | ✅ |
-| 🚫 | **Invalid values** | Are the values possible? | 3 payments of 0 with the type "not_defined" | ⚠️ |
-| 📅 | **Period** | Which months are complete? | The first and last months have very few orders | ⚠️ |
-| 📈 | **Outliers** | Are extreme values real? | Yes: expensive items are real, delivered purchases | ✅ |
-| ⚖️ | **Consistency** | Do the tables agree with each other? | Payments match item totals in 99.75% of orders | ✅ |
+**Checked:** how many customer IDs and how many real people there are.
 
-✅ no action needed&nbsp;&nbsp;&nbsp;⚠️ handled by a decision below
-
----
-
-## How a problem is handled
-
-Deleting a record is never the first answer. A record can be wrong for one measure and still correct for another: an order with a missing delivery date cannot be used for delivery time, but it is still a real sale.
-
-```mermaid
-flowchart LR
-    A["Problem found"] --> B{"How many rows?<br/>Which measure does it affect?<br/>Which way does it move the result?"}
-    B --> C["Leave it out of<br/>that measure only"]
-    B --> D["Flag it"]
-    B --> E["Fix it<br/>(only if the correct<br/>value is certain)"]
-    B --> F["Keep it<br/>and note it"]
-
-    classDef start fill:#fde7e5,stroke:#b42318,color:#1b201d
-    classDef ask fill:#e3e9fb,stroke:#2f54c7,color:#1b201d
-    classDef act fill:#e2f2df,stroke:#2c7a2c,color:#1b201d
-    class A start
-    class B ask
-    class C,D,E,F act
+```sql
+SELECT COUNT(DISTINCT customer_id)        AS customer_ids,
+       COUNT(DISTINCT customer_unique_id) AS customers
+FROM dbo.customers;
 ```
 
----
+**Found:** 99,441 customer IDs, but **96,096 people**. Olist creates a new `customer_id` for every order.
 
-## Key terms
+**Why it matters:** counted by `customer_id`, every customer would look like a one-time buyer and the repeat-purchase rate would be 0%.
 
-| Term | Meaning in plain words |
-|---|---|
-| **Row (grain)** | What one line of a table stands for: one order, one item in an order, one payment |
-| **Key** | The column, or pair of columns, that tells rows apart |
-| **Fan-out** | When joining tables makes rows repeat, so totals are counted more than once |
-| **Median** | The middle value: half of the values are below it, half above. Unlike the average, a few extreme values cannot pull it up |
-| **Analysis window** | The months used for trends over time |
+> [!IMPORTANT]
+> **Decision:** customers are counted with `customer_unique_id`.
 
 ---
 
-## Decisions
+## 🟪 2. Links between tables
 
-### 1. 👤 A customer is a person, not a customer ID
+**Checked:** orders that have no items.
 
-| | |
-|---|---|
-| **What** | Customers are counted with `customer_unique_id`. |
-| **Why** | Olist creates a new `customer_id` for every order. The 99,441 customer IDs belong to **96,096 people**. |
-| **What it changes** | Counted by `customer_id`, every customer would look like a one-time buyer and the repeat-purchase rate would be 0%. |
+```sql
+SELECT o.order_status, COUNT(*) AS orders_without_items
+FROM dbo.orders AS o
+LEFT JOIN dbo.order_items AS oi ON oi.order_id = o.order_id
+WHERE oi.order_id IS NULL
+GROUP BY o.order_status;
+```
 
-<details>
-<summary>Technical detail</summary>
+**Found:** 775 orders, almost all **unavailable** (603) or **canceled** (164).
 
-`customers` has one row per order (`customer_id` is 1:1 with `orders`). `customer_unique_id` is the person. `customer_id` is used only to join `orders` to `customers`.
-</details>
+**Why it matters:** these are orders that never happened. They have no sales value, so they do not affect revenue.
 
-### 2. 📅 Trends over time use January 2017 to August 2018
+---
 
-| | |
-|---|---|
-| **What** | Monthly trends and growth rates use the 20 months from January 2017 to August 2018. |
-| **Why** | The data runs from September 2016 to October 2018, but the edges are almost empty. November 2016 has no orders, December 2016 has 1, and September and October 2018 have 20 orders together, almost all canceled. Going from 1 order to 800 would show as **+79,900% growth**, which is not real. |
-| **What it changes** | 349 orders (0.35%) fall outside the window. They stay in the data and are left out only of time trends. |
+## 🟨 3. Missing values
+
+**Checked:** how many orders are missing each date.
+
+```sql
+SELECT COUNT(*) - COUNT(order_approved_at)             AS no_approval_date,
+       COUNT(*) - COUNT(order_delivered_carrier_date)  AS no_carrier_date,
+       COUNT(*) - COUNT(order_delivered_customer_date) AS no_delivery_date
+FROM dbo.orders;
+```
+
+**Found:** 160 → 1,783 → 2,965. The gaps grow along the order journey.
+
+**Why it matters:** a missing value is not always an error. A canceled order is never handed to the carrier, and an order on its way has no delivery date yet. Only **8 delivered orders** have no delivery date; they are left out of delivery time but still count as sales.
+
+---
+
+## 🟥 4. Invalid values
+
+**Checked:** how review scores are spread.
+
+```sql
+SELECT review_score,
+       ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM dbo.reviews), 2) AS pct_reviews
+FROM dbo.reviews
+GROUP BY review_score
+ORDER BY review_score;
+```
+
+**Found:** 58% give 5 stars, but **11.5% give 1 star**, more than 2 and 3 stars together.
+
+**Why it matters:** unhappy customers do not give a middle score, they give 1. An average score would hide them, so the share of 1-star reviews is reported next to it.
+
+---
+
+## 🟩 5. Period covered
+
+**Checked:** orders per month, including months with no orders.
+
+```sql
+SELECT DATETRUNC(month, order_purchase_timestamp) AS order_month,
+       COUNT(*) AS orders
+FROM dbo.orders
+GROUP BY DATETRUNC(month, order_purchase_timestamp)
+ORDER BY order_month;
+```
+
+**Found:** data runs from September 2016 to October 2018, but the edges are almost empty. November 2016 has **no orders**; September and October 2018 have only 20, mostly canceled.
+
+**Why it matters:** going from 1 order to 800 would show as +79,900% growth, which is not real.
+
+> [!IMPORTANT]
+> **Decision:** trends use **January 2017 to August 2018** (20 months). The other 349 orders (0.35%) stay in the data but are left out of trends.
 
 > [!NOTE]
-> November 2017 has the highest number of orders (7,544, about 60% more than October). This is Black Friday, a real business event, so it is kept and explained in the charts, not removed.
+> The peak in November 2017 (7,544 orders) is Black Friday, a real event, not an error.
 
-<details>
-<summary>Technical detail</summary>
+---
 
-`GROUP BY` month only shows months that have orders, so an empty month would simply be missing. A recursive CTE first builds the full list of months, then the monthly counts are joined to it with a `LEFT JOIN` and `COALESCE(orders, 0)`.
-</details>
+## 🟧 6. Outliers
 
-### 3. 📈 Extreme values are kept; the typical value is the median
+**Checked:** typical value vs extremes for price, freight and payment.
 
-| | |
-|---|---|
-| **What** | Very expensive items are kept. Typical values are reported with the median; totals (revenue, average order value) use the sum and the average. |
-| **Why** | The most expensive items are computers, appliances, art, instruments and consoles, and all of them were delivered. They are real purchases, not errors. |
-| **What it changes** | A few large values pull the average up, so the average alone would overstate the typical purchase. |
+```sql
+SELECT DISTINCT
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER () AS median_price,
+       AVG(price) OVER () AS avg_price,
+       MAX(price) OVER () AS max_price
+FROM dbo.order_items;
+```
 
-| Measure (BRL) | Median | Average | Highest |
+| BRL | Median | Average | Highest |
 |---|---:|---:|---:|
 | Item price | 75 | 121 | 6,735 |
 | Freight | 16 | 20 | 410 |
 | Payment | 100 | 154 | 13,664 |
 
-<details>
-<summary>Technical detail</summary>
+**Found:** the average is well above the median. The most expensive items are computers, appliances and consoles, all delivered.
 
-All three measures are right-skewed (average > median). SQL Server has no `MEDIAN()` function, so the median is computed with `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ...) OVER ()`.
-</details>
+**Why it matters:** a few large values pull the average up, so the average alone overstates a typical purchase.
 
-### 4. ⏱️ Orders with conflicting dates are kept, but left out of the measures they distort
-
-| | |
-|---|---|
-| **What** | Orders whose dates are out of order, or do not match their status, stay in the data and are flagged. |
-| **Why** | The conflicts affect single steps, not the whole order. No order was delivered before it was placed, so total delivery time is always valid. |
-| **What it changes** | These orders are left out of step-by-step durations (for example, approval to carrier). The 8 delivered orders without a delivery date are left out of delivery time, but still count as sales. |
-
-| Conflict | Orders |
-|---|---:|
-| Handed to the carrier before approval | 1,359 |
-| Delivered before being handed to the carrier | 23 |
-| Status "delivered" but a date is missing | 24 |
-| Status "canceled" but has a delivery date | 6 |
-| Delivered before purchase | **0** |
-
-### 5. 🗄️ Loading choices
-
-| What | Why |
-|---|---|
-| Zip codes and IDs are stored as text | They are labels, not amounts. As numbers, `01310` would become `1310`. |
-| The geolocation table is not loaded | The analysis does not use exact location; customer city and state are already in the `customers` table. |
-| A header row in the category translation table was removed | It had been loaded as a data row (72 rows instead of 71 categories). |
+> [!IMPORTANT]
+> **Decision:** extreme values are kept because they are real purchases. Typical values are reported with the **median**.
 
 ---
 
-## Open items
+## 🟫 7. Consistency
 
-Smaller findings and how they are planned to be handled in the analysis.
+**Checked:** whether item totals (price + freight) match payments for each order.
 
-| Finding | Size | Planned handling |
-|---|---|---|
-| Orders without any item | 775 orders | No sales value; they do not appear in item-based measures |
-| Orders without a payment | 1 order | Ignored |
-| Orders without a review | 768 orders | Reviews are optional; satisfaction is measured on reviewed orders only |
-| Orders with more than one review | 551 rows | One score per order is needed; a rule (for example, the latest review) will be chosen |
-| Reviews without a text message | 58.7% of reviews | Satisfaction is measured with the review score, not the text |
-| Products without a category | 610 products | Labelled "unknown" |
-| Categories without an English name | 2 categories, 13 products | The Portuguese name is shown |
-| Payment type "not_defined" | 3 payments, all 0 | Left out of payment-type analysis |
+```sql
+-- each table is first summarised to one row per order, then joined,
+-- so orders with several items and several payments are not counted twice
+WITH items_per_order    AS (SELECT order_id, SUM(price + freight_value) AS items_total
+                            FROM dbo.order_items GROUP BY order_id),
+     payments_per_order AS (SELECT order_id, SUM(payment_value) AS payments_total
+                            FROM dbo.payments GROUP BY order_id)
+SELECT ...
+```
 
-> [!TIP]
-> **Revenue** will be measured as the sum of item prices (`SUM(price)`), without freight. Item totals and payments match in 99.75% of orders, so this definition is supported by both tables.
+**Found:** **99.75%** of orders match within 1 BRL. Dates are also checked: no order is delivered before it was placed, but 1,359 orders were handed to the carrier before approval.
+
+**Why it matters:** the tables confirm each other, so revenue can be measured as the sum of item prices. Total delivery time is safe to use.
+
+> [!IMPORTANT]
+> **Decision:** orders with dates out of order are kept and left out only of step-by-step durations.
