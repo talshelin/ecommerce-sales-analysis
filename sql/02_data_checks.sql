@@ -416,3 +416,82 @@ SELECT DISTINCT
 FROM dbo.order_items;
 -- 16.26 | 84.52
 -- mean is 1.2x the median: right-skewed, but less than prices
+
+-- The 10 most expensive items: real products or errors?
+SELECT TOP 10
+       p.product_category_name,
+       ct.product_category_name_english,
+       o.order_status,
+       oi.price
+FROM dbo.order_items AS oi
+JOIN dbo.products AS p
+     ON p.product_id = oi.product_id
+JOIN dbo.orders AS o
+     ON o.order_id = oi.order_id
+LEFT JOIN dbo.category_translation AS ct   -- LEFT: some products have no translated category
+     ON ct.product_category_name = p.product_category_name
+ORDER BY oi.price DESC;
+-- housewares, computers, art, small appliances, musical instruments, consoles,
+-- sports, watches: all delivered -> real purchases, kept in the analysis
+
+-- Payment value
+SELECT MIN(payment_value) AS min_payment,
+       MAX(payment_value) AS max_payment,
+       AVG(payment_value) AS avg_payment
+FROM dbo.payments;
+-- 0.00 | 13,664.08 | 154.10
+
+SELECT DISTINCT
+       PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY payment_value) OVER () AS median_payment,
+       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY payment_value) OVER () AS p99_payment
+FROM dbo.payments;
+-- 100 | 1,039.92
+-- mean is 1.5x the median; the largest payment is above the most expensive item
+-- because one payment can cover a whole order (several items + freight)
+
+-- Payments with value 0, by type
+SELECT payment_type,
+       COUNT(*) AS payments
+FROM dbo.payments
+WHERE payment_value = 0
+GROUP BY payment_type
+ORDER BY payments DESC;
+-- voucher 6 | not_defined 3 (out of 103,886)
+
+
+/* ---------- Consistency: do related tables and columns agree? ---------- */
+
+-- Do items (price + freight) match payments for each order?
+-- Both tables are 1:N to orders, so each is first summarised to one row per order,
+-- then joined. Joining the raw tables would multiply rows (fan-out).
+WITH items_per_order AS (
+    SELECT order_id,
+           SUM(price + freight_value) AS items_total
+    FROM dbo.order_items
+    GROUP BY order_id
+),
+payments_per_order AS (
+    SELECT order_id,
+           SUM(payment_value) AS payments_total
+    FROM dbo.payments
+    GROUP BY order_id
+)
+SELECT CASE
+           WHEN p.payments_total IS NULL                    THEN 'no payment'
+           WHEN ABS(p.payments_total - i.items_total) <= 1  THEN 'match'
+           WHEN p.payments_total > i.items_total            THEN 'paid more'
+           ELSE                                                  'paid less'
+       END AS result,
+       COUNT(*) AS orders
+FROM items_per_order AS i
+LEFT JOIN payments_per_order AS p
+       ON p.order_id = i.order_id
+GROUP BY CASE
+           WHEN p.payments_total IS NULL                    THEN 'no payment'
+           WHEN ABS(p.payments_total - i.items_total) <= 1  THEN 'match'
+           WHEN p.payments_total > i.items_total            THEN 'paid more'
+           ELSE                                                  'paid less'
+       END
+ORDER BY orders DESC;
+-- match 98,416 (99.75%) | paid more 232 | paid less 17 | no payment 1 (total 98,666)
+-- the two tables agree for almost every order
