@@ -95,3 +95,52 @@ SELECT COUNT(*)                             AS total_rows,
 FROM dbo.vw_orders;
 -- 99,441 | 99,441 | 349 | 96,470 | 6.8
 -- One row per order (no fan-out). 6.8% of valid deliveries arrived after the estimated date.
+
+
+/* ===== vw_order_items: one row = one order item ===== */
+
+-- Every joined table is on the "one" side (one product, one seller, one order per item),
+-- so the row count stays the same as order_items.
+-- Order details and flags come from vw_orders, so each rule is written only once.
+CREATE OR ALTER VIEW dbo.vw_order_items AS
+SELECT
+    -- item
+    oi.order_id,
+    oi.order_item_id,
+    oi.product_id,
+    oi.seller_id,
+    oi.price,
+    oi.freight_value,
+    -- product and seller
+    -- English name; 2 categories without a translation are named here; products without a category are 'unknown'
+    COALESCE(ct.product_category_name_english,
+             CASE p.product_category_name
+                  WHEN 'pc_gamer' THEN 'pc_gamer'
+                  WHEN 'portateis_cozinha_e_preparadores_de_alimentos' THEN 'portable_kitchen_food_preparers'
+             END,
+             'unknown') AS category,
+    s.seller_state,
+    -- from the order
+    vo.customer_unique_id,
+    vo.customer_state,
+    vo.order_month,
+    vo.review_score,
+    vo.is_late,
+    -- flags
+    vo.is_sale,
+    vo.in_window,
+    vo.has_valid_delivery
+FROM dbo.order_items AS oi
+JOIN      dbo.products             AS p  ON p.product_id             = oi.product_id
+LEFT JOIN dbo.category_translation AS ct ON ct.product_category_name = p.product_category_name
+JOIN      dbo.sellers              AS s  ON s.seller_id              = oi.seller_id
+JOIN      dbo.vw_orders            AS vo ON vo.order_id              = oi.order_id;
+GO
+
+-- Check: same rows and same revenue as the raw table
+SELECT COUNT(*)   AS item_rows,
+       SUM(price) AS total_revenue,
+       SUM(CASE WHEN category = 'unknown' THEN 1 ELSE 0 END) AS unknown_category_items
+FROM dbo.vw_order_items;
+-- 112,650 | 13,591,643.70 | 1,603
+-- No item lost or duplicated; revenue matches SUM(price) in order_items.

@@ -135,3 +135,16 @@ UNION ALL SELECT 'sellers',              COUNT(*) FROM dbo.sellers
 UNION ALL SELECT 'category_translation', COUNT(*) FROM dbo.category_translation;
 -- orders 99,441 | order_items 112,650 | customers 99,441 | payments 103,886
 -- reviews 99,224 | products 32,951 | sellers 3,095 | category_translation 71
+
+
+/* Indexes
+   order_items, payments and reviews have several rows per order and no primary key.
+   An index on order_id lets joins and lookups by order avoid reading the whole table.
+*/
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_order_items_order_id')
+    CREATE INDEX IX_order_items_order_id ON dbo.order_items (order_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payments_order_id')
+    CREATE INDEX IX_payments_order_id ON dbo.payments (order_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_reviews_order_id')
+    CREATE INDEX IX_reviews_order_id ON dbo.reviews (order_id);
+GO
