@@ -144,3 +144,47 @@ SELECT COUNT(*)   AS item_rows,
 FROM dbo.vw_order_items;
 -- 112,650 | 13,591,643.70 | 1,603
 -- No item lost or duplicated; revenue matches SUM(price) in order_items.
+
+
+/* ===== vw_customers: one row = one person ===== */
+
+-- City and state come from the person's latest order (people can move).
+-- The first sale is found over the whole history, before any analysis-window filter,
+-- so a 2016 customer does not look new in 2017.
+CREATE OR ALTER VIEW dbo.vw_customers AS
+WITH ranked_orders AS (
+    SELECT c.customer_unique_id,
+           c.customer_city,
+           c.customer_state,
+           ROW_NUMBER() OVER (PARTITION BY c.customer_unique_id
+                              ORDER BY o.order_purchase_timestamp DESC) AS order_rank
+    FROM dbo.orders    AS o
+    JOIN dbo.customers AS c ON c.customer_id = o.customer_id
+),
+sales_per_customer AS (
+    SELECT customer_unique_id,
+           MIN(CASE WHEN is_sale = 1 THEN order_purchase_timestamp END) AS first_sale_date,
+           SUM(is_sale) AS sale_count
+    FROM dbo.vw_orders
+    GROUP BY customer_unique_id
+)
+SELECT r.customer_unique_id,
+       r.customer_city,
+       r.customer_state,
+       s.first_sale_date,
+       DATETRUNC(month, s.first_sale_date) AS cohort_month,
+       s.sale_count
+FROM ranked_orders AS r
+JOIN sales_per_customer AS s ON s.customer_unique_id = r.customer_unique_id
+WHERE r.order_rank = 1;
+GO
+
+-- Check: one row per person
+SELECT COUNT(*)                                         AS customers,
+       COUNT(DISTINCT customer_unique_id)               AS unique_customers,
+       SUM(CASE WHEN sale_count = 0  THEN 1 ELSE 0 END) AS no_sale_customers,
+       SUM(CASE WHEN sale_count >= 2 THEN 1 ELSE 0 END) AS repeat_customers
+FROM dbo.vw_customers;
+-- 96,096 | 96,096 | 1,106 | 2,888
+-- One row per person. 1,106 people only have canceled or unavailable orders;
+-- 2,888 people bought at least twice.
