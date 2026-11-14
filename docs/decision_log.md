@@ -15,6 +15,8 @@ Before the analysis, the data was checked to see how far it can be trusted. Each
 | 🟧 | [Outliers](#-6-outliers) | Extreme prices are real; the median is used |
 | 🟫 | [Consistency](#-7-consistency) | Payments and items agree in 99.75% of orders |
 
+The checks led to a set of [analysis rules](#analysis-rules), applied in the views in [`sql/03_clean_views.sql`](../sql/03_clean_views.sql).
+
 ---
 
 ## 🟦 1. Keys
@@ -160,3 +162,50 @@ SELECT ...
 
 > [!IMPORTANT]
 > **Decision:** orders with dates out of order are kept and left out only of step-by-step durations.
+
+---
+
+## Analysis rules
+
+The rules below are applied in the views, not in the raw tables. Records are never deleted: each one carries flags (`is_sale`, `in_window`, `has_valid_delivery`), so every measure uses only the orders that are valid for it.
+
+### 💰 Revenue = sum of item prices
+
+```sql
+SUM(price)
+```
+
+**Why:** `payment_value` includes freight and instalment interest, and it is recorded per order, so it cannot be split by product, category or seller. Vouchers appear in the data as a payment method, not as a discount, so they are not deducted.
+
+### 🛒 A sale is any order that was not canceled or unavailable
+
+```sql
+is_sale = CASE WHEN order_status NOT IN ('canceled', 'unavailable') THEN 1 ELSE 0 END
+```
+
+**Why:** in these two statuses the customer never receives the product. Counting only delivered orders would make the last months look weaker, because orders still on their way are real sales.
+
+### 🚚 Delivery measures use delivered orders with a delivery date
+
+```sql
+has_valid_delivery = CASE WHEN order_status = 'delivered'
+                           AND order_delivered_customer_date IS NOT NULL THEN 1 ELSE 0 END
+```
+
+**Why:** without the date condition, the 8 delivered orders with no delivery date would be counted as "on time".
+
+> [!WARNING]
+> The estimated delivery date has no time (00:00). An order delivered at 15:00 on the estimated day is on time, so the delivery date is compared as a date. Comparing with the time would mark **1,292** on-time orders as late (8.1% late instead of the correct **6.8%**).
+
+### ⭐ One review score per order: the newest review
+
+**Why:** 547 orders have more than one review, and in 202 of them the score changed. An average would create scores nobody gave (1 and 5 → 3) and hide the 1-star reviews. The newest review is a real score and the customer's last opinion. It affects 0.2% of orders.
+
+### 👤 Customers: latest address, first purchase from the full history
+
+- **City and state** come from the person's latest order, because people can move (39 people changed state).
+- **First purchase** is found over the whole history before the analysis window is applied, so a customer who first bought in 2016 is not counted as new in 2017.
+
+### 🏷️ Category names
+
+Categories are shown in English. The 2 categories without a translation are translated in the view, and the 610 products without a category are labelled `unknown`.

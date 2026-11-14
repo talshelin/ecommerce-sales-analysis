@@ -29,6 +29,14 @@ Run in order:
 | `sql/02_data_checks.sql` | Data checks: keys, links, missing and invalid values, period, outliers, consistency |
 | `sql/03_clean_views.sql` | Analysis-ready views with flags for sales, analysis window and valid deliveries |
 
-## Data checks and decisions
+## Data checks and cleaning
 
-What was checked, what was found and what was decided: [docs/decision_log.md](docs/decision_log.md)
+The raw tables are never changed. Cleaning rules live in three views, one per level of analysis:
+
+| View | One row = | Used for |
+|---|---|---|
+| `vw_orders` | one order | growth, delivery, reviews |
+| `vw_order_items` | one order item | categories, sellers, revenue |
+| `vw_customers` | one person | retention, segmentation |
+
+Problem records are flagged, not deleted. What was checked, what was found and every rule: [docs/decision_log.md](docs/decision_log.md)
