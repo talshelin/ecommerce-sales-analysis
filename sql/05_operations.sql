@@ -43,3 +43,17 @@ WHERE has_valid_delivery = 1
 -- A typical order arrives in 10 days; 1 in 10 customers waits more than 23 days.
 -- The average is above the median: a few very slow deliveries pull it up.
 -- About 1 in 15 orders arrives after the estimated date.
+
+-- Late deliveries by month: is the problem growing?
+SELECT order_month,
+       COUNT(*)                             AS deliveries,
+       ROUND(100.0 * AVG(is_late * 1.0), 1) AS pct_late
+FROM dbo.vw_orders
+WHERE has_valid_delivery = 1
+  AND in_window          = 1
+GROUP BY order_month
+ORDER BY order_month;
+-- In most months 3-5% of orders are late. The 6.8% average hides three peaks:
+-- Nov 2017 (12.4%, Black Friday: deliveries +63% on October), Feb 2018 (14.1%) and Mar 2018 (19.0%).
+-- Lateness is not rising steadily; it jumps in specific months, once right after a volume surge.
+-- The last months may look better than they are: orders still on their way are not counted yet.
