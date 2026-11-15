@@ -57,3 +57,28 @@ ORDER BY order_month;
 -- Nov 2017 (12.4%, Black Friday: deliveries +63% on October), Feb 2018 (14.1%) and Mar 2018 (19.0%).
 -- Lateness is not rising steadily; it jumps in specific months, once right after a volume surge.
 -- The last months may look better than they are: orders still on their way are not counted yet.
+
+-- Delivery time distribution (data for a histogram)
+-- CASE WHEN takes the first true condition, so only the upper limit is needed.
+-- Labels are text ('8-14' would sort after '31+'), so buckets are sorted by their smallest delivery_days.
+WITH delivery_buckets AS (
+    SELECT delivery_days,
+           CASE
+               WHEN delivery_days <= 7  THEN '0-7'
+               WHEN delivery_days <= 14 THEN '8-14'
+               WHEN delivery_days <= 21 THEN '15-21'
+               WHEN delivery_days <= 30 THEN '22-30'
+               ELSE                          '31+'
+           END AS delivery_bucket
+    FROM dbo.vw_orders
+    WHERE has_valid_delivery = 1
+      AND in_window          = 1
+)
+SELECT delivery_bucket,
+       COUNT(*)                                           AS deliveries,
+       ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) AS pct_deliveries
+FROM delivery_buckets
+GROUP BY delivery_bucket
+ORDER BY MIN(delivery_days);
+-- 0-7: 31.9% | 8-14: 39.4% | 15-21: 16.7% | 22-30: 7.6% | 31+: 4.4%
+-- 71% of orders arrive within two weeks; 12% take more than three weeks.
