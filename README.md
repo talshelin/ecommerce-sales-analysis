@@ -28,6 +28,7 @@ Run in order:
 | `sql/01_create_tables.sql` | Database and table definitions, row count check |
 | `sql/02_data_checks.sql` | Data checks: keys, links, missing and invalid values, period, outliers, consistency |
 | `sql/03_clean_views.sql` | Analysis-ready views with flags for sales, analysis window and valid deliveries |
+| `sql/04_kpi_analysis.sql` | A. Growth: monthly revenue, orders, AOV, MoM and YoY |
 
 ## Data checks and cleaning
 
