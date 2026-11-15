@@ -96,3 +96,38 @@ ORDER BY revenue DESC;
 -- The top 7 categories bring half of revenue; the top 18 (24% of categories) bring 80%.
 -- Categories earn in different ways: watches_gifts sells fewer, pricier orders (AOV 213 BRL),
 -- bed_bath_table sells many cheaper ones (AOV 110 BRL), with similar revenue.
+
+
+/* ===== A4. Which states bring the revenue, and how much does one customer spend there? ===== */
+
+-- One row = one state (the delivery address of each order).
+-- States differ a lot in size, so totals mostly show population.
+-- Ratios (revenue per customer, AOV) compare states fairly.
+WITH state_revenue AS (
+    SELECT customer_state,
+           SUM(items_revenue)                 AS revenue,
+           COUNT(*)                           AS orders,
+           COUNT(DISTINCT customer_unique_id) AS customers
+    FROM dbo.vw_orders
+    WHERE is_sale   = 1
+      AND in_window = 1
+    GROUP BY customer_state
+)
+SELECT customer_state,
+       revenue,
+       orders,
+       customers,
+       ROUND(revenue / customers, 2)                    AS revenue_per_customer,
+       ROUND(revenue / orders, 2)                       AS aov,
+       ROUND(100.0 * revenue / SUM(revenue) OVER (), 2) AS revenue_share_pct,
+       ROUND(100.0 * SUM(revenue) OVER (ORDER BY revenue DESC
+                                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+             / SUM(revenue) OVER (), 2)                 AS cumulative_share_pct
+FROM state_revenue
+ORDER BY revenue DESC;
+-- SP alone brings 38% of revenue; SP, RJ and MG together 63%.
+-- But SP has the lowest revenue per customer (130 BRL) and the lowest AOV (126 BRL).
+-- In distant states one customer spends more, e.g. PB 223 BRL and AL 202 BRL per customer.
+-- Possible reason (to test with delivery data): far from most sellers, freight is high,
+-- so customers there buy fewer, pricier items. Small states have few customers,
+-- so their ratios should be read with care.
