@@ -63,3 +63,36 @@ ORDER BY order_year;
 -- 2018: 7.34M BRL | 53,531 orders | AOV 137.14
 -- Revenue +138%, orders +137%, AOV +0.4%.
 -- Almost all growth comes from more orders; customers did not spend more per order.
+
+
+/* ===== A3. Which categories bring the revenue? Share and Pareto ===== */
+
+-- One row = one category. vw_order_items is used because category is an item-level detail;
+-- orders are counted with DISTINCT, since one order can hold several items of the same category.
+-- SUM(...) OVER ()                     = total revenue on every row -> share of total
+-- SUM(...) OVER (ORDER BY ... ROWS ...) = running total             -> cumulative share
+-- ROWS adds one row at a time; the default RANGE would add categories with equal revenue together.
+WITH category_revenue AS (
+    SELECT category,
+           SUM(price)               AS revenue,
+           COUNT(DISTINCT order_id) AS orders
+    FROM dbo.vw_order_items
+    WHERE is_sale   = 1
+      AND in_window = 1
+    GROUP BY category
+)
+SELECT category,
+       revenue,
+       orders,
+       ROUND(revenue / orders, 2)                    AS aov,
+       ROUND(100.0 * revenue / SUM(revenue) OVER (), 2) AS revenue_share_pct,
+       ROUND(100.0 * SUM(revenue) OVER (ORDER BY revenue DESC
+                                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+             / SUM(revenue) OVER (), 2)              AS cumulative_share_pct
+FROM category_revenue
+ORDER BY revenue DESC;
+-- 74 categories, 13.45M BRL in total.
+-- The largest category, health_beauty, is only 9.3% of revenue: no category dominates.
+-- The top 7 categories bring half of revenue; the top 18 (24% of categories) bring 80%.
+-- Categories earn in different ways: watches_gifts sells fewer, pricier orders (AOV 213 BRL),
+-- bed_bath_table sells many cheaper ones (AOV 110 BRL), with similar revenue.
