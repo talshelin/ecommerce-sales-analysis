@@ -43,3 +43,23 @@ ORDER BY order_month;
 -- but fell from +687% (Jan) to +49% (Aug): growth continues but is slowing.
 -- Nov 2017 (1.0M BRL, +52% MoM) is Black Friday. The -26% MoM in Dec 2017 is not a drop:
 -- December is still above October; it only looks low next to the November peak.
+
+
+/* ===== A2. Where does growth come from: more orders or bigger baskets? ===== */
+
+-- One row = one year. January to August only, so both years cover the same months
+-- (2018 data ends in August, and 2017 alone would include Black Friday).
+SELECT YEAR(order_month)                       AS order_year,
+       SUM(items_revenue)                      AS revenue,
+       COUNT(*)                                AS orders,
+       ROUND(SUM(items_revenue) / COUNT(*), 2) AS aov
+FROM dbo.vw_orders
+WHERE is_sale   = 1
+  AND in_window = 1
+  AND MONTH(order_month) <= 8
+GROUP BY YEAR(order_month)
+ORDER BY order_year;
+-- 2017: 3.08M BRL | 22,562 orders | AOV 136.55
+-- 2018: 7.34M BRL | 53,531 orders | AOV 137.14
+-- Revenue +138%, orders +137%, AOV +0.4%.
+-- Almost all growth comes from more orders; customers did not spend more per order.
