@@ -1,25 +1,29 @@
 # Data Checks and Decisions
 
-Before the analysis, the data was checked to see how far it can be trusted. Each section below shows **the query**, **what was found** and **why it matters**. Full queries: [`sql/02_data_checks.sql`](../sql/02_data_checks.sql).
+This document records how far the data can be trusted and every rule used in the analysis. It has three parts:
+
+1. **[Data checks](#part-1-data-checks):** what was checked, what was found and why it matters. Queries: [`sql/02_data_checks.sql`](../sql/02_data_checks.sql)
+2. **[Cleaning rules](#part-2-cleaning-rules):** the rules built into the views. Queries: [`sql/03_clean_views.sql`](../sql/03_clean_views.sql)
+3. **[Analysis decisions](#part-3-analysis-decisions):** choices made while answering the business questions
 
 > [!IMPORTANT]
 > **Verdict: the data is reliable.** Problems are small and appear in specific places. No raw data is deleted. Problem records are left out only of the measures they would distort.
 
-| | Check | Result |
-|---|---|---|
-| 🟦 | [Keys](#-1-keys) | Customers must be counted as people, not IDs |
-| 🟪 | [Links between tables](#-2-links-between-tables) | 775 orders have no items: canceled or unavailable |
-| 🟨 | [Missing values](#-3-missing-values) | Missing dates are expected |
-| 🟥 | [Invalid values](#-4-invalid-values) | Unhappy customers give 1 star, not 2 or 3 |
-| 🟩 | [Period covered](#-5-period-covered) | Trends use Jan 2017 to Aug 2018 |
-| 🟧 | [Outliers](#-6-outliers) | Extreme prices are real; the median is used |
-| 🟫 | [Consistency](#-7-consistency) | Payments and items agree in 99.75% of orders |
-
-The checks led to a set of [analysis rules](#analysis-rules), applied in the views in [`sql/03_clean_views.sql`](../sql/03_clean_views.sql).
-
 ---
 
-## 🟦 1. Keys
+## Part 1. Data checks
+
+| Check | Result | Action |
+|---|---|---|
+| [1. Keys](#1-keys) | 99,441 customer IDs belong to 96,096 people | Count people with `customer_unique_id` |
+| [2. Links between tables](#2-links-between-tables) | 775 orders have no items: canceled or unavailable | None needed |
+| [3. Missing values](#3-missing-values) | Missing dates follow the order journey | Leave out of the affected measure only |
+| [4. Invalid values](#4-invalid-values) | Unhappy customers give 1 star, not 2 or 3 | Report the 1-star share next to the average |
+| [5. Period covered](#5-period-covered) | The first and last months are almost empty | Trends use Jan 2017 to Aug 2018 |
+| [6. Outliers](#6-outliers) | Extreme prices are real purchases | Keep them; report the median |
+| [7. Consistency](#7-consistency) | Payments and items agree in 99.75% of orders | Revenue = sum of item prices |
+
+### 1. Keys
 
 **Checked:** how many customer IDs and how many real people there are.
 
@@ -38,7 +42,7 @@ FROM dbo.customers;
 
 ---
 
-## 🟪 2. Links between tables
+### 2. Links between tables
 
 **Checked:** orders that have no items.
 
@@ -56,7 +60,7 @@ GROUP BY o.order_status;
 
 ---
 
-## 🟨 3. Missing values
+### 3. Missing values
 
 **Checked:** how many orders are missing each date.
 
@@ -73,7 +77,7 @@ FROM dbo.orders;
 
 ---
 
-## 🟥 4. Invalid values
+### 4. Invalid values
 
 **Checked:** how review scores are spread.
 
@@ -91,7 +95,7 @@ ORDER BY review_score;
 
 ---
 
-## 🟩 5. Period covered
+### 5. Period covered
 
 **Checked:** orders per month, including months with no orders.
 
@@ -115,7 +119,7 @@ ORDER BY order_month;
 
 ---
 
-## 🟧 6. Outliers
+### 6. Outliers
 
 **Checked:** typical value vs extremes for price, freight and payment.
 
@@ -142,7 +146,7 @@ FROM dbo.order_items;
 
 ---
 
-## 🟫 7. Consistency
+### 7. Consistency
 
 **Checked:** whether item totals (price + freight) match payments for each order.
 
@@ -165,11 +169,23 @@ SELECT ...
 
 ---
 
-## Analysis rules
+## Part 2. Cleaning rules
 
-The rules below are applied in the views, not in the raw tables. Records are never deleted: each one carries flags (`is_sale`, `in_window`, `has_valid_delivery`), so every measure uses only the orders that are valid for it.
+The rules below are applied in the views, not in the raw tables. Records are never deleted: each one carries flags, so every measure uses only the orders that are valid for it.
 
-### 💰 Revenue = sum of item prices
+| View | One row = | Rows |
+|---|---|---:|
+| `vw_orders` | one order | 99,441 |
+| `vw_order_items` | one order item | 112,650 |
+| `vw_customers` | one person | 96,096 |
+
+| Flag | 1 when | Used for |
+|---|---|---|
+| `is_sale` | the order is not canceled or unavailable | revenue, orders, customers |
+| `in_window` | the order is between January 2017 and August 2018 | trends |
+| `has_valid_delivery` | the order is delivered and has a delivery date | delivery time, late deliveries |
+
+### 8. Revenue = sum of item prices
 
 ```sql
 SUM(price)
@@ -177,7 +193,7 @@ SUM(price)
 
 **Why:** `payment_value` includes freight and instalment interest, and it is recorded per order, so it cannot be split by product, category or seller. Vouchers appear in the data as a payment method, not as a discount, so they are not deducted.
 
-### 🛒 A sale is any order that was not canceled or unavailable
+### 9. A sale is any order that was not canceled or unavailable
 
 ```sql
 is_sale = CASE WHEN order_status NOT IN ('canceled', 'unavailable') THEN 1 ELSE 0 END
@@ -185,7 +201,7 @@ is_sale = CASE WHEN order_status NOT IN ('canceled', 'unavailable') THEN 1 ELSE 
 
 **Why:** in these two statuses the customer never receives the product. Counting only delivered orders would make the last months look weaker, because orders still on their way are real sales.
 
-### 🚚 Delivery measures use delivered orders with a delivery date
+### 10. Delivery measures use delivered orders with a delivery date
 
 ```sql
 has_valid_delivery = CASE WHEN order_status = 'delivered'
@@ -197,15 +213,61 @@ has_valid_delivery = CASE WHEN order_status = 'delivered'
 > [!WARNING]
 > The estimated delivery date has no time (00:00). An order delivered at 15:00 on the estimated day is on time, so the delivery date is compared as a date. Comparing with the time would mark **1,292** on-time orders as late (8.1% late instead of the correct **6.8%**).
 
-### ⭐ One review score per order: the newest review
+### 11. One review score per order: the newest review
 
 **Why:** 547 orders have more than one review, and in 202 of them the score changed. An average would create scores nobody gave (1 and 5 → 3) and hide the 1-star reviews. The newest review is a real score and the customer's last opinion. It affects 0.2% of orders.
 
-### 👤 Customers: latest address, first purchase from the full history
+### 12. Customers: latest address, first purchase from the full history
 
 - **City and state** come from the person's latest order, because people can move (39 people changed state).
 - **First purchase** is found over the whole history before the analysis window is applied, so a customer who first bought in 2016 is not counted as new in 2017.
 
-### 🏷️ Category names
+### 13. Category names
 
 Categories are shown in English. The 2 categories without a translation are translated in the view, and the 610 products without a category are labelled `unknown`.
+
+---
+
+## Part 3. Analysis decisions
+
+### 14. Same-day repeat orders are not a return
+
+29% of repeat orders (930 of 3,217) were placed on the same day as the customer's previous order: one shopping session split into two orders. They are left out of the time to the second order and of the return measure. With them, the median time to return would be 29 days instead of **69**.
+
+### 15. When an order cannot be split, the unclear orders are left out
+
+Reviews and late deliveries belong to an order, while categories and sellers belong to items.
+
+| Measure | Orders used | Share |
+|---|---|---:|
+| Review score by category | Orders with one category | 99.2% of reviewed orders |
+| Late deliveries by seller | Orders with one seller | 98.7% of delivered orders |
+
+Guessing how to split an order between categories or sellers would add errors; leaving out the few unclear orders does not.
+
+### 16. Minimum group size
+
+In a small group one order moves the rate a lot: one more late order in a state with 40 deliveries adds 2.5 points. Groups below a minimum are left out of comparisons. The threshold is chosen from the group sizes:
+
+| Comparison | Minimum | Left out |
+|---|---:|---|
+| States | 100 deliveries | 3 states, 0.2% of deliveries |
+| Sellers | 30 deliveries | small sellers; the rest handle 83% of deliveries |
+
+### 17. Churn threshold: 280 days
+
+There is no subscription, so a lost customer has to be defined. 90% of returning customers placed their next order within 280 days. A customer with no order for **280 days** is treated as lost.
+
+> [!NOTE]
+> The data covers about two years, so very long gaps cannot be seen yet. The real threshold may be somewhat longer.
+
+### 18. First experience: first orders before March 2018
+
+To compare whether customers return after a late or on-time first order, only first orders before March 2018 are used, so everyone had at least six months to come back. Without this, late first orders (frequent in February and March 2018) would have had less time to return and would look worse than they are.
+
+### 19. RFM: reference date and scoring
+
+- **Reference date:** the day after the last order in the data (30 August 2018), not today. The data ends in 2018; using today would make every customer look years inactive.
+- **Recency and monetary** are scored 1 to 5 with `NTILE(5)`: five equal groups, so the limits come from the data (for example, monetary score 4 starts at 110 BRL).
+- **Frequency is not scored with NTILE:** 97% of customers have one order, and NTILE would give identical customers different scores. Frequency is used as 1 order or 2+ orders.
+- **Segments** combine frequency, the recency and monetary scores and the 280-day churn threshold.
