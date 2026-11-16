@@ -31,6 +31,7 @@ Run in order:
 | `sql/04_kpi_analysis.sql` | A. Growth: monthly revenue, orders, AOV, categories and states |
 | `sql/05_operations.sql` | B. Delivery: order funnel, delivery time, late deliveries and reviews |
 | `sql/06_cohort_retention.sql` | C. Retention: repeat customers, cohorts, time to second order |
+| `sql/07_rfm.sql` | D. Customer segments with RFM |
 
 ## Data checks and cleaning
 
