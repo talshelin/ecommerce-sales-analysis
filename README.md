@@ -30,6 +30,7 @@ Run in order:
 | `sql/03_clean_views.sql` | Analysis-ready views with flags for sales, analysis window and valid deliveries |
 | `sql/04_kpi_analysis.sql` | A. Growth: monthly revenue, orders, AOV, categories and states |
 | `sql/05_operations.sql` | B. Delivery: order funnel, delivery time, late deliveries and reviews |
+| `sql/06_cohort_retention.sql` | C. Retention: repeat customers, cohorts, time to second order |
 
 ## Data checks and cleaning
 
