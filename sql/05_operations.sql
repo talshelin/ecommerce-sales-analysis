@@ -102,3 +102,40 @@ GROUP BY is_late;
 -- More than half of late orders get 1 star, about 8 times the on-time rate.
 -- This is a correlation, not proof of cause: late orders may cluster in certain states,
 -- categories or sellers that also get lower scores.
+
+-- Dose-response check: does the score fall step by step as the delay grows?
+-- days_late = delivery date minus estimated date (the estimate has no time, so the delivery is cast to date).
+WITH delay_groups AS (
+    SELECT review_score,
+           DATEDIFF(day, order_estimated_delivery_date,
+                         CAST(order_delivered_customer_date AS date)) AS days_late
+    FROM dbo.vw_orders
+    WHERE has_valid_delivery = 1
+      AND in_window          = 1
+      AND review_score IS NOT NULL
+),
+labelled AS (
+    SELECT review_score,
+           days_late,
+           CASE
+               WHEN days_late <= 0 THEN 'on time'
+               WHEN days_late <= 3 THEN '1-3 days late'
+               WHEN days_late <= 7 THEN '4-7 days late'
+               ELSE                     '8+ days late'
+           END AS delay_group
+    FROM delay_groups
+)
+SELECT delay_group,
+       COUNT(*)                                                              AS orders,
+       ROUND(AVG(review_score * 1.0), 2)                                     AS avg_score,
+       ROUND(100.0 * AVG(CASE WHEN review_score = 1 THEN 1.0 ELSE 0 END), 1) AS pct_one_star
+FROM labelled
+GROUP BY delay_group
+ORDER BY MIN(days_late);
+-- on time:       89,182 | 4.29 | 6.6% one star
+-- 1-3 days late:  1,851 | 3.29 | 25.1%
+-- 4-7 days late:  1,748 | 2.10 | 58.6%
+-- 8+ days late:   2,779 | 1.70 | 69.8%
+-- The score falls at every step. Even 1-3 days late almost quadruples the one-star rate.
+-- A steady step pattern makes the link much more convincing than a single on-time/late split,
+-- although it is still not proof of cause.
