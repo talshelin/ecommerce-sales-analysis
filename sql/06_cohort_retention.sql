@@ -141,3 +141,58 @@ FROM gaps;
 -- Churn threshold: a customer with no order for 280 days is treated as lost.
 -- The data covers only about two years, so very long gaps cannot be seen yet:
 -- the real P90 may be somewhat higher.
+
+
+/* ===== C4. Does a bad first experience stop customers from coming back? ===== */
+
+-- For each person: the first sale (ROW_NUMBER, oldest = 1) and whether they bought again
+-- on a later day (same-day orders were placed before the first delivery, so they cannot be a reaction to it).
+-- Only first orders before March 2018: everyone gets at least 6 months to come back.
+-- Without this, late first orders (frequent in Feb-Mar 2018) would have had less time to return.
+WITH ranked_sales AS (
+    SELECT customer_unique_id,
+           order_purchase_timestamp,
+           is_late,
+           has_valid_delivery,
+           review_score,
+           ROW_NUMBER() OVER (PARTITION BY customer_unique_id
+                              ORDER BY order_purchase_timestamp) AS order_rank
+    FROM dbo.vw_orders
+    WHERE is_sale = 1
+),
+first_orders AS (
+    SELECT *
+    FROM ranked_sales
+    WHERE order_rank = 1
+),
+last_sale AS (
+    SELECT customer_unique_id,
+           MAX(order_purchase_timestamp) AS last_purchase
+    FROM dbo.vw_orders
+    WHERE is_sale = 1
+    GROUP BY customer_unique_id
+),
+customer_return AS (
+    SELECT f.customer_unique_id,
+           f.is_late,
+           f.has_valid_delivery,
+           f.review_score,
+           CASE WHEN CAST(l.last_purchase AS date) > CAST(f.order_purchase_timestamp AS date)
+                THEN 1 ELSE 0 END AS returned
+    FROM first_orders AS f
+    JOIN last_sale    AS l ON l.customer_unique_id = f.customer_unique_id
+    WHERE f.order_purchase_timestamp >= '2017-01-01'
+      AND f.order_purchase_timestamp <  '2018-03-01'
+)
+SELECT is_late                               AS first_order_late,
+       COUNT(*)                              AS customers,
+       SUM(returned)                         AS returned_customers,
+       ROUND(100.0 * AVG(returned * 1.0), 2) AS pct_returned
+FROM customer_return
+WHERE has_valid_delivery = 1
+GROUP BY is_late
+ORDER BY is_late;
+-- First order on time: 51,559 customers, 2.93% came back
+-- First order late:     3,668 customers, 1.99% came back
+-- Customers whose first order was late came back about a third less often (-32%).
+-- Only 73 late customers returned, and this is a correlation, not proof of cause.
