@@ -139,3 +139,27 @@ ORDER BY MIN(days_late);
 -- The score falls at every step. Even 1-3 days late almost quadruples the one-star rate.
 -- A steady step pattern makes the link much more convincing than a single on-time/late split,
 -- although it is still not proof of cause.
+
+
+/* ===== B4. Late deliveries by state ===== */
+
+-- One row = one state. States with fewer than 100 deliveries are left out (HAVING):
+-- in RR (40 deliveries) one more late order would move the rate by 2.5 points.
+-- This drops RR, AP and AC: 187 deliveries, 0.2% of the total.
+-- HAVING filters groups after GROUP BY; WHERE filters rows before it.
+-- is_late is 0/1: its average is the late rate, its sum is the number of late deliveries.
+SELECT customer_state,
+       COUNT(*)                             AS deliveries,
+       SUM(is_late)                         AS late_deliveries,
+       ROUND(100.0 * AVG(is_late * 1.0), 1) AS pct_late,
+       ROUND(AVG(delivery_days * 1.0), 1)   AS avg_days
+FROM dbo.vw_orders
+WHERE has_valid_delivery = 1
+  AND in_window          = 1
+GROUP BY customer_state
+HAVING COUNT(*) >= 100
+ORDER BY pct_late DESC;
+-- The highest late rates are in the north-east: AL 21.5%, MA 17.5%, SE 15.4%. SP: 4.5%.
+-- The rate shows where the process is broken; the count shows where most customers are affected.
+-- RJ has both: a 12.1% late rate and about 1,490 late deliveries, 17 times AL's.
+-- AM is the slowest state (26.4 days) but rarely late (2.8%): its estimated dates are already long.
