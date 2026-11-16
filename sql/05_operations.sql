@@ -82,3 +82,23 @@ GROUP BY delivery_bucket
 ORDER BY MIN(delivery_days);
 -- 0-7: 31.9% | 8-14: 39.4% | 15-21: 16.7% | 22-30: 7.6% | 31+: 4.4%
 -- 71% of orders arrive within two weeks; 12% take more than three weeks.
+
+
+/* ===== B3. Do late deliveries get lower review scores? ===== */
+
+-- One row = one group (on time / late). Orders without a review are left out.
+-- AVG(CASE WHEN ... THEN 1.0 ELSE 0 END) = share of orders that meet the condition.
+SELECT is_late,
+       COUNT(*)                                                              AS orders,
+       ROUND(AVG(review_score * 1.0), 2)                                     AS avg_score,
+       ROUND(100.0 * AVG(CASE WHEN review_score = 1 THEN 1.0 ELSE 0 END), 1) AS pct_one_star
+FROM dbo.vw_orders
+WHERE has_valid_delivery = 1
+  AND in_window          = 1
+  AND review_score IS NOT NULL
+GROUP BY is_late;
+-- On time: 89,182 orders | average 4.29 | 6.6% one star
+-- Late:     6,378 orders | average 2.27 | 53.8% one star
+-- More than half of late orders get 1 star, about 8 times the on-time rate.
+-- This is a correlation, not proof of cause: late orders may cluster in certain states,
+-- categories or sellers that also get lower scores.
