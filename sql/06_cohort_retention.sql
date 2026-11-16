@@ -109,3 +109,35 @@ ORDER BY a.cohort_month, a.month_index;
 -- About 5 in 1,000 new customers buy again the next month.
 -- More returning customers over time come from bigger cohorts, not from higher loyalty.
 -- Newer cohorts have fewer months (right censoring: the data ends in August 2018).
+
+
+/* ===== C3. How many days until the next order? Churn threshold ===== */
+
+-- LAG with PARTITION BY gives each order the date of the same person's previous order.
+-- First orders have no previous order (NULL) and are left out.
+-- Same-day orders are also left out: 930 of 3,217 repeat orders (29%) came on the same day as the
+-- previous one, which is the same shopping session split into two orders, not a customer coming back.
+WITH customer_orders AS (
+    SELECT customer_unique_id,
+           order_purchase_timestamp,
+           LAG(order_purchase_timestamp) OVER (PARTITION BY customer_unique_id
+                                               ORDER BY order_purchase_timestamp) AS prev_purchase
+    FROM dbo.vw_orders
+    WHERE is_sale = 1
+),
+gaps AS (
+    SELECT DATEDIFF(day, prev_purchase, order_purchase_timestamp) AS days_since_prev
+    FROM customer_orders
+    WHERE prev_purchase IS NOT NULL
+      AND DATEDIFF(day, prev_purchase, order_purchase_timestamp) > 0
+)
+SELECT DISTINCT
+       COUNT(*) OVER ()                                                     AS repeat_orders,
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY days_since_prev) OVER () AS median_days,
+       PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY days_since_prev) OVER () AS p90_days
+FROM gaps;
+-- 2,287 repeat orders | median 69 days | P90 280 days
+-- Half of returning customers come back within about 2 months; 90% within about 9 months.
+-- Churn threshold: a customer with no order for 280 days is treated as lost.
+-- The data covers only about two years, so very long gaps cannot be seen yet:
+-- the real P90 may be somewhat higher.
