@@ -163,3 +163,86 @@ ORDER BY pct_late DESC;
 -- The rate shows where the process is broken; the count shows where most customers are affected.
 -- RJ has both: a 12.1% late rate and about 1,490 late deliveries, 17 times AL's.
 -- AM is the slowest state (26.4 days) but rarely late (2.8%): its estimated dates are already long.
+
+
+/* ===== B5. Late deliveries by seller ===== */
+
+-- An order can have items from several sellers, so a late order cannot be split between them.
+-- Only orders with exactly one seller are used: 1.3% of delivered orders have more than one.
+-- Sellers are small (median 7 deliveries), so sellers with fewer than 30 deliveries are left out:
+-- the remaining 614 sellers handle 83% of deliveries.
+WITH sellers_per_order AS (
+    SELECT order_id,
+           COUNT(DISTINCT seller_id) AS seller_count,
+           MIN(seller_id)            AS seller_id      -- with one seller, MIN is that seller
+    FROM dbo.vw_order_items
+    GROUP BY order_id
+),
+single_seller_deliveries AS (
+    SELECT s.seller_id,
+           o.is_late
+    FROM dbo.vw_orders AS o
+    JOIN sellers_per_order AS s ON s.order_id = o.order_id
+    WHERE s.seller_count       = 1
+      AND o.has_valid_delivery = 1
+      AND o.in_window          = 1
+),
+seller_stats AS (
+    SELECT seller_id,
+           COUNT(*)     AS deliveries,
+           SUM(is_late) AS late_deliveries
+    FROM single_seller_deliveries
+    GROUP BY seller_id
+)
+SELECT TOP 15
+       st.seller_id,
+       se.seller_state,
+       st.deliveries,
+       st.late_deliveries,
+       ROUND(100.0 * st.late_deliveries / st.deliveries, 1) AS pct_late
+FROM seller_stats AS st
+JOIN dbo.sellers  AS se ON se.seller_id = st.seller_id
+WHERE st.deliveries >= 30
+ORDER BY pct_late DESC;
+-- The worst sellers have 20-36% late deliveries, mostly with 30-90 deliveries each.
+-- One seller stands out: 388 deliveries and 19.1% late (74 late orders), both large and bad.
+
+-- Are late deliveries concentrated in a few bad sellers?
+WITH sellers_per_order AS (
+    SELECT order_id,
+           COUNT(DISTINCT seller_id) AS seller_count,
+           MIN(seller_id)            AS seller_id
+    FROM dbo.vw_order_items
+    GROUP BY order_id
+),
+single_seller_deliveries AS (
+    SELECT s.seller_id,
+           o.is_late
+    FROM dbo.vw_orders AS o
+    JOIN sellers_per_order AS s ON s.order_id = o.order_id
+    WHERE s.seller_count       = 1
+      AND o.has_valid_delivery = 1
+      AND o.in_window          = 1
+),
+seller_stats AS (
+    SELECT seller_id,
+           COUNT(*)     AS deliveries,
+           SUM(is_late) AS late_deliveries
+    FROM single_seller_deliveries
+    GROUP BY seller_id
+)
+SELECT CASE WHEN deliveries >= 30 AND 1.0 * late_deliveries / deliveries >= 0.15
+            THEN 'high late rate (15%+)'
+            ELSE 'other sellers'
+       END                                                                         AS seller_group,
+       COUNT(*)                                                                    AS sellers,
+       SUM(deliveries)                                                             AS deliveries,
+       SUM(late_deliveries)                                                        AS late_deliveries,
+       ROUND(100.0 * SUM(late_deliveries) / SUM(SUM(late_deliveries)) OVER (), 1) AS pct_of_all_late
+FROM seller_stats
+GROUP BY CASE WHEN deliveries >= 30 AND 1.0 * late_deliveries / deliveries >= 0.15
+              THEN 'high late rate (15%+)'
+              ELSE 'other sellers'
+         END;
+-- 39 sellers with a late rate of 15% or more cause only 8.2% of all late deliveries.
+-- Lateness is spread across many sellers: removing the worst sellers would not solve it.
