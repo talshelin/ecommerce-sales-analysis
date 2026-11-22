@@ -69,9 +69,11 @@ flowchart LR
     E --> F["6. Recommend<br/>findings and actions"]
 
     classDef done fill:#e2f2df,stroke:#2c7a2c,color:#1b201d
+    classDef doing fill:#fff4d6,stroke:#a8550a,color:#1b201d
     classDef todo fill:#f1f3ef,stroke:#9aa49d,color:#5b645e,stroke-dasharray: 4 3
     class A,B,C,D done
-    class E,F todo
+    class E doing
+    class F todo
 ```
 
 | File | Content |
@@ -83,6 +85,8 @@ flowchart LR
 | `sql/05_operations.sql` | B. Delivery: funnel, delivery time, late deliveries and reviews, states, sellers |
 | `sql/06_cohort_retention.sql` | C. Retention: repeat customers, cohorts, time to the second order, first experience |
 | `sql/07_rfm.sql` | D. Customer segments with RFM |
+| `sql/08_powerbi_views.sql` | Result views for Power BI: sellers, cohorts, RFM segments |
+| `powerbi/Olist_dashboard.pbix` | Dashboard: A. Growth and B. Delivery pages (C and D in progress) |
 
 Every query in the files is followed by its result and a short interpretation.
 
@@ -192,7 +196,10 @@ ecommerce-sales-analysis/
 │   ├── 04_kpi_analysis.sql
 │   ├── 05_operations.sql
 │   ├── 06_cohort_retention.sql
-│   └── 07_rfm.sql
+│   ├── 07_rfm.sql
+│   └── 08_powerbi_views.sql
+├── powerbi/
+│   └── Olist_dashboard.pbix
 └── data/raw/                CSV files (not stored in the repo)
 ```
 
@@ -202,6 +209,7 @@ ecommerce-sales-analysis/
 2. Run `sql/01_create_tables.sql` in SQL Server 2022 to create the database and tables.
 3. Load each CSV into the table with the same name (SSMS Import Flat File) and run the row count check at the end of the script.
 4. Run the remaining scripts in order. `03_clean_views.sql` must run before the analysis scripts.
+5. Open `powerbi/Olist_dashboard.pbix` in Power BI Desktop and point the data source to your SQL Server (Transform data → Data source settings).
 
 ## Limitations
 

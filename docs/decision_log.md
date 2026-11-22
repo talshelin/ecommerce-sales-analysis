@@ -1,10 +1,11 @@
 # Data Checks and Decisions
 
-This document records how far the data can be trusted and every rule used in the analysis. It has three parts:
+This document records how far the data can be trusted and every rule used in the analysis. It has four parts:
 
 1. **[Data checks](#part-1-data-checks):** what was checked, what was found and why it matters. Queries: [`sql/02_data_checks.sql`](../sql/02_data_checks.sql)
 2. **[Cleaning rules](#part-2-cleaning-rules):** the rules built into the views. Queries: [`sql/03_clean_views.sql`](../sql/03_clean_views.sql)
 3. **[Analysis decisions](#part-3-analysis-decisions):** choices made while answering the business questions
+4. **[Dashboard decisions](#part-4-dashboard-decisions):** how the Power BI report is built. Result views: [`sql/08_powerbi_views.sql`](../sql/08_powerbi_views.sql)
 
 > [!IMPORTANT]
 > **Verdict: the data is reliable.** Problems are small and appear in specific places. No raw data is deleted. Problem records are left out only of the measures they would distort.
@@ -271,3 +272,46 @@ To compare whether customers return after a late or on-time first order, only fi
 - **Recency and monetary** are scored 1 to 5 with `NTILE(5)`: five equal groups, so the limits come from the data (for example, monetary score 4 starts at 110 BRL).
 - **Frequency is not scored with NTILE:** 97% of customers have one order, and NTILE would give identical customers different scores. Frequency is used as 1 order or 2+ orders.
 - **Segments** combine frequency, the recency and monetary scores and the 280-day churn threshold.
+
+---
+
+## Part 4. Dashboard decisions
+
+### 20. A small model: three views and a date table
+
+The report uses only the three clean views and a date table. The rules live in SQL, so Power BI does not repeat them.
+
+| Table | Role | Relationship |
+|---|---|---|
+| `DimDate` | Dimension, one row per day | 1 to many, single direction, to both fact views |
+| `vw_customers` | Dimension, one row per person | 1 to many, single direction, to both fact views |
+| `vw_orders` | Fact, one row per order | none to `vw_order_items` |
+| `vw_order_items` | Fact, one row per item | none to `vw_orders` |
+
+- The two facts are **not** linked to each other. A link would give filters two paths to the same table; the shared dimensions already filter both.
+- There are no separate product or seller tables. Category and seller state are already columns of `vw_order_items`.
+
+### 21. The analysis window is a report-level filter
+
+Every page is filtered to January 2017 to August 2018 on `DimDate`. Previous-month and previous-year measures also require `in_window = 1`, so January 2017 has no month-over-month value, as in the SQL results.
+
+### 22. Orders are counted from items
+
+`Orders` counts orders in `vw_order_items`: **97,905**. `vw_orders` has **97,910** sale orders; the 5 extra orders have no items and no revenue. Counting both revenue and orders from the same table keeps the average order value consistent.
+
+### 23. Growth is shown as January to August, year over year
+
+The cards compare January to August 2018 with January to August 2017: orders **+137.3%**, average order value **+0.4%**. 2018 ends in August, so a full-year comparison would compare 12 months with 8. A month-over-month card was not added: over the whole period it has no meaning, and monthly changes are visible in the line chart.
+
+### 24. Typical delivery time is the median
+
+The delivery card shows the median, **10 days**. The average is 12.5 days because a few very late orders pull it up.
+
+### 25. Result views for analyses that measures cannot rebuild
+
+Seller results (single-seller orders, one row per seller), cohorts and RFM segments are prepared in SQL as views and imported as ready tables. Their logic is explained in files 05 to 07.
+
+### 26. Sellers are shown as a scatter, not a ranking
+
+A "worst 15 sellers" table suggested that a few sellers cause the late deliveries. The data says the opposite: sellers late 15% of the time or more cause only **8%** of late deliveries. The scatter shows every seller with 30+ deliveries, with the 15% line, so the reader sees that most late deliveries come from large sellers with normal late rates.
+
