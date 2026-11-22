@@ -85,8 +85,8 @@ flowchart LR
 | `sql/05_operations.sql` | B. Delivery: funnel, delivery time, late deliveries and reviews, states, sellers |
 | `sql/06_cohort_retention.sql` | C. Retention: repeat customers, cohorts, time to the second order, first experience |
 | `sql/07_rfm.sql` | D. Customer segments with RFM |
-| `sql/08_powerbi_views.sql` | Result views for Power BI: sellers, cohorts, RFM segments |
-| `powerbi/Olist_dashboard.pbix` | Dashboard: A. Growth and B. Delivery pages (C and D in progress) |
+| `sql/08_powerbi_views.sql` | Result views for Power BI: sellers, cohorts, repeat-order gaps, RFM segments |
+| `powerbi/Olist_dashboard.pbix` | Dashboard: A. Growth, B. Delivery and C. Retention pages (D in progress) |
 
 Every query in the files is followed by its result and a short interpretation.
 

@@ -118,8 +118,30 @@ GROUP BY d.seller_id, se.seller_state;
 GO
 
 
+/* ===== Days between repeat orders (from 06, C3): one row = one repeat order ===== */
+
+-- Same-day orders are left out: they are one shopping session split into two orders.
+CREATE OR ALTER VIEW dbo.vw_repeat_gaps AS
+WITH customer_orders AS (
+    SELECT customer_unique_id,
+           order_purchase_timestamp,
+           LAG(order_purchase_timestamp) OVER (PARTITION BY customer_unique_id
+                                               ORDER BY order_purchase_timestamp) AS prev_purchase
+    FROM dbo.vw_orders
+    WHERE is_sale = 1
+)
+SELECT customer_unique_id,
+       CAST(order_purchase_timestamp AS date)                   AS order_date,
+       DATEDIFF(day, prev_purchase, order_purchase_timestamp)   AS days_since_prev
+FROM customer_orders
+WHERE prev_purchase IS NOT NULL
+  AND DATEDIFF(day, prev_purchase, order_purchase_timestamp) > 0;
+GO
+
+
 -- Check
 SELECT 'vw_cohort_retention' AS view_name, COUNT(*) AS row_count FROM dbo.vw_cohort_retention
 UNION ALL SELECT 'vw_rfm_customers',   COUNT(*) FROM dbo.vw_rfm_customers
-UNION ALL SELECT 'vw_seller_delivery', COUNT(*) FROM dbo.vw_seller_delivery;
--- 207 | 94,707 | 2,925
+UNION ALL SELECT 'vw_seller_delivery', COUNT(*) FROM dbo.vw_seller_delivery
+UNION ALL SELECT 'vw_repeat_gaps',     COUNT(*) FROM dbo.vw_repeat_gaps;
+-- 207 | 94,707 | 2,925 | 2,287
