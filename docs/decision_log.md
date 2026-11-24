@@ -322,3 +322,7 @@ With all three groups, the one-order bar (97% of customers) made the 2-order and
 ### 28. Ranked bar charts show the top 8 with data labels
 
 Category and state charts show 8 bars with values on the bars instead of an x-axis, so every bar fits without a scrollbar. The state late-rate chart shows the 8 worst states among those with 100+ orders.
+
+### 29. The retention curve sits next to the cohort matrix
+
+The matrix shows every cohort but needs scrolling. A line of average retention by months since the first order (month 0 excluded) shows the shape in one look: **0.48%** in month 1, about half of that by month 3, then close to **0.2%**. Legends were removed where the subtitle already says which colour is which.
