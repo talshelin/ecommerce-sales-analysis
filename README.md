@@ -11,12 +11,13 @@ An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online ma
 2. [Business questions](#business-questions)
 3. [Dataset](#dataset)
 4. [Approach](#approach)
-5. [Data checks and cleaning](#data-checks-and-cleaning)
-6. [Key findings](#key-findings)
-7. [Dashboard](#dashboard)
-8. [Repository structure](#repository-structure)
-9. [How to reproduce](#how-to-reproduce)
-10. [Limitations](#limitations)
+5. [Metric definitions](#metric-definitions)
+6. [Data checks and cleaning](#data-checks-and-cleaning)
+7. [Key findings](#key-findings)
+8. [Dashboard](#dashboard)
+9. [Repository structure](#repository-structure)
+10. [How to reproduce](#how-to-reproduce)
+11. [Limitations](#limitations)
 
 ---
 
@@ -89,6 +90,50 @@ flowchart LR
 | `powerbi/Olist_dashboard.pbix` | Dashboard: A. Growth, B. Delivery, C. Retention and D. Segments pages |
 
 Every query in the files is followed by its result and a short interpretation.
+
+
+### Power BI model
+
+```mermaid
+flowchart LR
+    date["DimDate"] --> orders["vw_orders<br/>one row per order"]
+    date --> items["vw_order_items<br/>one row per item"]
+    cust["vw_customers<br/>one row per person"] --> orders
+    cust --> items
+    cust --> rfm["vw_rfm_customers"]
+    cust --> gaps["vw_repeat_gaps"]
+    sellers["vw_seller_delivery"] --> items
+    cohort["vw_cohort_retention<br/>stand-alone"]
+
+    classDef dim fill:#e3e9fb,stroke:#2f54c7,color:#1b201d
+    classDef fact fill:#2f54c7,stroke:#2f54c7,color:#ffffff
+    classDef result fill:#f1f3ef,stroke:#9aa49d,color:#1b201d
+    class date,cust dim
+    class orders,items fact
+    class rfm,gaps,sellers,cohort result
+```
+
+A star schema: two fact tables share the date and customer dimensions and are not linked to each other. The result views from `08_powerbi_views.sql` hold analyses that measures cannot rebuild (cohorts, time between orders, RFM segments, seller results). All measures live in one `_Measures` table; ratios are always total numerator divided by total denominator, never an average of ratios.
+
+## Metric definitions
+
+All metrics use sale orders (every status except canceled and unavailable) from January 2017 to August 2018, unless stated otherwise.
+
+| Metric | Definition |
+|---|---|
+| Revenue | Sum of item prices, without freight |
+| Orders | Sale orders that have at least one item |
+| Average order value (AOV) | Revenue / orders |
+| Active customers | Distinct people (`customer_unique_id`) with a sale order |
+| Delivery time | Days from purchase to delivery; the median is reported |
+| Late rate | Orders delivered after the estimated date (compared as dates) / delivered orders with valid dates |
+| 1-star share | Orders whose newest review has score 1 / reviewed orders |
+| Repeat customer rate | People with 2+ sale orders / people with at least one sale order (full history) |
+| Repeat revenue share | Revenue from people with 2+ orders / total revenue |
+| Cohort retention, month *n* | People whose first order was in a given month and who order again *n* months later / people in that cohort |
+| Days to return | Days between two consecutive orders of the same person; same-day orders are excluded |
+| Churn threshold | 280 days: 90% of returning customers come back within this time |
+| RFM | Recency: days from the last order to the day after the last order in the data. Frequency: number of orders. Monetary: revenue |
 
 ## Data checks and cleaning
 
@@ -225,6 +270,7 @@ ecommerce-sales-analysis/
 ## Limitations
 
 - **No cost data:** revenue can be measured, profit cannot.
+- **No traffic data:** there are no website visits or sessions, so conversion rates and the reasons customers do not return cannot be measured.
 - **Observational data:** links such as late delivery and low scores are correlations, not proven causes.
 - **Data ends in August 2018:** recent customers and cohorts are observed for a short time (right censoring).
 - **Reviews are optional:** satisfaction is measured only on reviewed orders.
