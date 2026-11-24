@@ -1,9 +1,9 @@
 # Olist E-Commerce: Growth, Delivery and Customer Retention
 
-An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online marketplace, in SQL Server (and Power BI, in progress). It answers four business questions: is the company growing, is it delivering on time, do customers come back, and which customers deserve attention.
+An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online marketplace, in SQL Server and Power BI. It answers four business questions: is the company growing, is it delivering on time, do customers come back, and which customers deserve attention.
 
 > [!NOTE]
-> **Status:** data checks, cleaning and the SQL analysis are complete. The Power BI dashboard and the final recommendations are in progress.
+> **Status:** data checks, cleaning, the SQL analysis and the Power BI dashboard are complete. The final recommendations are in progress.
 
 ## Contents
 
@@ -13,9 +13,10 @@ An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online ma
 4. [Approach](#approach)
 5. [Data checks and cleaning](#data-checks-and-cleaning)
 6. [Key findings](#key-findings)
-7. [Repository structure](#repository-structure)
-8. [How to reproduce](#how-to-reproduce)
-9. [Limitations](#limitations)
+7. [Dashboard](#dashboard)
+8. [Repository structure](#repository-structure)
+9. [How to reproduce](#how-to-reproduce)
+10. [Limitations](#limitations)
 
 ---
 
@@ -71,9 +72,8 @@ flowchart LR
     classDef done fill:#e2f2df,stroke:#2c7a2c,color:#1b201d
     classDef doing fill:#fff4d6,stroke:#a8550a,color:#1b201d
     classDef todo fill:#f1f3ef,stroke:#9aa49d,color:#5b645e,stroke-dasharray: 4 3
-    class A,B,C,D done
-    class E doing
-    class F todo
+    class A,B,C,D,E done
+    class F doing
 ```
 
 | File | Content |
@@ -182,6 +182,16 @@ Every check, finding and rule, with the reasoning behind it: **[docs/decision_lo
 - Big spenders bring 55% of revenue, but almost half of that revenue comes from customers already lost.
 - The first group to protect is the recent big spenders (about 14,750 people), in the two months after their first order.
 
+## Dashboard
+
+Four pages in Power BI, one per business question. Every chart title states the finding, not only the metric. Red marks late deliveries and other warning signs; gray marks the comparison group.
+
+| A. Growth | B. Delivery |
+|---|---|
+| ![A. Growth](reports/images/page_a_growth.png) | ![B. Delivery](reports/images/page_b_delivery.png) |
+| **C. Retention** | **D. Segments** |
+| ![C. Retention](reports/images/page_c_retention.png) | ![D. Segments](reports/images/page_d_segments.png) |
+
 ## Repository structure
 
 ```
@@ -200,6 +210,7 @@ ecommerce-sales-analysis/
 │   └── 08_powerbi_views.sql
 ├── powerbi/
 │   └── Olist_dashboard.pbix
+├── reports/images/          dashboard screenshots
 └── data/raw/                CSV files (not stored in the repo)
 ```
 

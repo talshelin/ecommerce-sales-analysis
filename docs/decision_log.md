@@ -315,3 +315,10 @@ Seller results (single-seller orders, one row per seller), cohorts and RFM segme
 
 A "worst 15 sellers" table suggested that a few sellers cause the late deliveries. The data says the opposite: sellers late 15% of the time or more cause only **8%** of late deliveries. The scatter shows every seller with 30+ deliveries, with the 15% line, so the reader sees that most late deliveries come from large sellers with normal late rates.
 
+### 27. The repeat-customer chart shows only customers with 2+ orders
+
+With all three groups, the one-order bar (97% of customers) made the 2-order and 3+ order bars almost invisible. The chart now shows only repeat buyers, and the shares are still measured against all customers: 2.8% of customers bring 4.8% of revenue, 0.2% bring 0.7%. The 97% is stated in the page title and the cards.
+
+### 28. Ranked bar charts show the top 8 with data labels
+
+Category and state charts show 8 bars with values on the bars instead of an x-axis, so every bar fits without a scrollbar. The state late-rate chart shows the 8 worst states among those with 100+ orders.
