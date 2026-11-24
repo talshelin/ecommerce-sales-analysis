@@ -2,6 +2,8 @@
 
 An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online marketplace, in SQL Server and Power BI. It answers four business questions: is the company growing, is it delivering on time, do customers come back, and which customers deserve attention.
 
+![Power BI dashboard, growth page](reports/images/page_a_growth.png)
+
 > [!NOTE]
 > **Status:** data checks, cleaning, the SQL analysis and the Power BI dashboard are complete. The final recommendations are in progress.
 
@@ -91,7 +93,6 @@ flowchart LR
 
 Every query in the files is followed by its result and a short interpretation.
 
-
 ### Power BI model
 
 ```mermaid
@@ -168,6 +169,8 @@ Every check, finding and rule, with the reasoning behind it: **[docs/decision_lo
 
 ### A. Are we growing?
 
+![Revenue by month and source of growth](reports/images/readme_a_growth.png)
+
 | Measure | Result |
 |---|---|
 | Monthly revenue | About **7x** from January 2017 (120K BRL) to August 2018 (849K BRL) |
@@ -180,6 +183,8 @@ Every check, finding and rule, with the reasoning behind it: **[docs/decision_lo
 - The November 2017 peak is Black Friday. The −26% month-over-month in December is not a drop, only a comparison with that peak.
 
 ### B. Are we delivering what we promised?
+
+![Late deliveries and 1-star reviews](reports/images/readme_b_delivery.png)
 
 | Measure | Result |
 |---|---|
@@ -202,6 +207,8 @@ Every check, finding and rule, with the reasoning behind it: **[docs/decision_lo
 
 ### C. Do customers come back?
 
+![Cohort retention and days to return](reports/images/readme_c_retention.png)
+
 | Measure | Result |
 |---|---|
 | Customers who bought more than once | **3%**, bringing 5.6% of revenue |
@@ -213,6 +220,8 @@ Every check, finding and rule, with the reasoning behind it: **[docs/decision_lo
 - 29% of repeat orders came on the same day as the previous order: a split shopping session, not a customer coming back. They are excluded from the time-to-return measures.
 
 ### D. Which customers should we focus on?
+
+![Customer segments](reports/images/readme_d_segments.png)
 
 | Segment | Customers | Revenue | Status |
 |---|---:|---:|---|
@@ -255,7 +264,9 @@ ecommerce-sales-analysis/
 │   └── 08_powerbi_views.sql
 ├── powerbi/
 │   └── Olist_dashboard.pbix
-├── reports/images/          dashboard screenshots
+├── reports/
+│   ├── images/              dashboard screenshots and charts
+│   └── make_charts.py       draws the README and decision log charts from the raw CSVs
 └── data/raw/                CSV files (not stored in the repo)
 ```
 
@@ -266,6 +277,7 @@ ecommerce-sales-analysis/
 3. Load each CSV into the table with the same name (SSMS Import Flat File) and run the row count check at the end of the script.
 4. Run the remaining scripts in order. `03_clean_views.sql` must run before the analysis scripts.
 5. Open `powerbi/Olist_dashboard.pbix` in Power BI Desktop and point the data source to your SQL Server (Transform data → Data source settings).
+6. Optional: `python reports/make_charts.py` redraws the README and decision log charts from the CSV files (needs pandas and matplotlib).
 
 ## Limitations
 

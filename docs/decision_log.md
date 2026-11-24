@@ -7,6 +7,8 @@ This document records how far the data can be trusted and every rule used in the
 3. **[Analysis decisions](#part-3-analysis-decisions):** choices made while answering the business questions
 4. **[Dashboard decisions](#part-4-dashboard-decisions):** how the Power BI report is built. Result views: [`sql/08_powerbi_views.sql`](../sql/08_powerbi_views.sql)
 
+Charts are drawn from the raw CSV files with the same rules as the views ([`reports/make_charts.py`](../reports/make_charts.py)); every number in them matches the SQL results.
+
 > [!IMPORTANT]
 > **Verdict: the data is reliable.** Problems are small and appear in specific places. No raw data is deleted. Problem records are left out only of the measures they would distort.
 
@@ -74,6 +76,8 @@ FROM dbo.orders;
 
 **Found:** 160 → 1,783 → 2,965. The gaps grow along the order journey.
 
+![Missing dates by step](../reports/images/dl_missing_dates.png)
+
 **Why it matters:** a missing value is not always an error. A canceled order is never handed to the carrier, and an order on its way has no delivery date yet. Only **8 delivered orders** have no delivery date; they are left out of delivery time but still count as sales.
 
 ---
@@ -92,6 +96,8 @@ ORDER BY review_score;
 
 **Found:** 58% give 5 stars, but **11.5% give 1 star**, more than 2 and 3 stars together.
 
+![Review score distribution](../reports/images/dl_review_scores.png)
+
 **Why it matters:** unhappy customers do not give a middle score, they give 1. An average score would hide them, so the share of 1-star reviews is reported next to it.
 
 ---
@@ -109,6 +115,8 @@ ORDER BY order_month;
 ```
 
 **Found:** data runs from September 2016 to October 2018, but the edges are almost empty. November 2016 has **no orders**; September and October 2018 have only 20, mostly canceled.
+
+![Orders per month](../reports/images/dl_orders_per_month.png)
 
 **Why it matters:** going from 1 order to 800 would show as +79,900% growth, which is not real.
 
@@ -139,6 +147,8 @@ FROM dbo.order_items;
 | Payment | 100 | 154 | 13,664 |
 
 **Found:** the average is well above the median. The most expensive items are computers, appliances and consoles, all delivered.
+
+![Item price distribution](../reports/images/dl_price_distribution.png)
 
 **Why it matters:** a few large values pull the average up, so the average alone overstates a typical purchase.
 
@@ -214,6 +224,8 @@ has_valid_delivery = CASE WHEN order_status = 'delivered'
 > [!WARNING]
 > The estimated delivery date has no time (00:00). An order delivered at 15:00 on the estimated day is on time, so the delivery date is compared as a date. Comparing with the time would mark **1,292** on-time orders as late (8.1% late instead of the correct **6.8%**).
 
+![Late rate by comparison method](../reports/images/dl_late_definition.png)
+
 ### 11. One review score per order: the newest review
 
 **Why:** 547 orders have more than one review, and in 202 of them the score changed. An average would create scores nobody gave (1 and 5 → 3) and hide the 1-star reviews. The newest review is a real score and the customer's last opinion. It affects 0.2% of orders.
@@ -234,6 +246,8 @@ Categories are shown in English. The 2 categories without a translation are tran
 ### 14. Same-day repeat orders are not a return
 
 29% of repeat orders (930 of 3,217) were placed on the same day as the customer's previous order: one shopping session split into two orders. They are left out of the time to the second order and of the return measure. With them, the median time to return would be 29 days instead of **69**.
+
+![Same-day repeat orders](../reports/images/dl_same_day_repeats.png)
 
 ### 15. When an order cannot be split, the unclear orders are left out
 
@@ -259,6 +273,8 @@ In a small group one order moves the rate a lot: one more late order in a state 
 
 There is no subscription, so a lost customer has to be defined. 90% of returning customers placed their next order within 280 days. A customer with no order for **280 days** is treated as lost.
 
+![Days until the next order](../reports/images/readme_c_retention.png)
+
 > [!NOTE]
 > The data covers about two years, so very long gaps cannot be seen yet. The real threshold may be somewhat longer.
 
@@ -271,6 +287,8 @@ To compare whether customers return after a late or on-time first order, only fi
 - **Reference date:** the day after the last order in the data (30 August 2018), not today. The data ends in 2018; using today would make every customer look years inactive.
 - **Recency and monetary** are scored 1 to 5 with `NTILE(5)`: five equal groups, so the limits come from the data (for example, monetary score 4 starts at 110 BRL).
 - **Frequency is not scored with NTILE:** 97% of customers have one order, and NTILE would give identical customers different scores. Frequency is used as 1 order or 2+ orders.
+
+  ![Orders per customer](../reports/images/dl_orders_per_customer.png)
 - **Segments** combine frequency, the recency and monetary scores and the 280-day churn threshold.
 
 ---
@@ -315,6 +333,8 @@ Seller results (single-seller orders, one row per seller), cohorts and RFM segme
 
 A "worst 15 sellers" table suggested that a few sellers cause the late deliveries. The data says the opposite: sellers late 15% of the time or more cause only **8%** of late deliveries. The scatter shows every seller with 30+ deliveries, with the 15% line, so the reader sees that most late deliveries come from large sellers with normal late rates.
 
+![Sellers: deliveries and late rate](../reports/images/dl_sellers.png)
+
 ### 27. The repeat-customer chart shows only customers with 2+ orders
 
 With all three groups, the one-order bar (97% of customers) made the 2-order and 3+ order bars almost invisible. The chart now shows only repeat buyers, and the shares are still measured against all customers: 2.8% of customers bring 4.8% of revenue, 0.2% bring 0.7%. The 97% is stated in the page title and the cards.
@@ -326,3 +346,5 @@ Category and state charts show 8 bars with values on the bars instead of an x-ax
 ### 29. The retention curve sits next to the cohort matrix
 
 The matrix shows every cohort but needs scrolling. A line of average retention by months since the first order (month 0 excluded) shows the shape in one look: **0.48%** in month 1, about half of that by month 3, then close to **0.2%**. Legends were removed where the subtitle already says which colour is which.
+
+![Retention page](../reports/images/page_c_retention.png)
