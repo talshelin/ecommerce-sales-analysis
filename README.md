@@ -1,318 +1,106 @@
 # Olist E-Commerce: Growth, Delivery and Customer Retention
 
-An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online marketplace, in SQL Server and Power BI. It answers four business questions: is the company growing, is it delivering on time, do customers come back, and which customers deserve attention.
+An analysis of about 100,000 orders from Olist, a Brazilian online marketplace, in SQL Server and Power BI.
 
-![Power BI dashboard, growth page](reports/images/page_a_growth.png)
+## Business problem
 
-> [!NOTE]
-> **Status:** complete. Data checks, cleaning, SQL analysis, Power BI dashboard, findings and recommendations.
+Olist's monthly revenue grew about 7x from January 2017 to August 2018, but growth slowed in 2018. Management needs to know where the next growth should come from: new customers, existing customers, or fixing the problems that drive customers away.
 
-## Contents
+| | Question |
+|---|---|
+| **A** | Are we growing, and where does growth come from? |
+| **B** | Are we delivering what we promised? |
+| **C** | Do customers come back? |
+| **D** | Which customers should we focus on? |
 
-1. [Introduction](#introduction)
-2. [Business questions](#business-questions)
-3. [Dataset](#dataset)
-4. [Approach](#approach)
-5. [Metric definitions](#metric-definitions)
-6. [Data checks and cleaning](#data-checks-and-cleaning)
-7. [Key findings](#key-findings)
-8. [Recommendations](#recommendations)
-9. [Dashboard](#dashboard)
-10. [Repository structure](#repository-structure)
-11. [How to reproduce](#how-to-reproduce)
-12. [Limitations](#limitations)
+## Data
 
----
-
-## Introduction
-
-Olist connects small Brazilian shops to large online marketplaces. A customer places one order, which can contain products from several sellers; Olist handles payment, and the sellers ship the products through logistics partners. After delivery, the customer is asked to leave a review.
-
-The analysis starts from a question a manager would ask:
-
-> **"Are we growing? Do our customers come back? Which customers and which problems should we focus on?"**
-
-**Business problem.** Olist's monthly revenue grew about 7x from January 2017 to August 2018, but growth slowed sharply in 2018 (year-over-year growth fell from +687% to +49%). Management needs to decide where the next growth should come from: winning more new customers, keeping the ones it already has, or fixing problems that drive customers away. This analysis gives the evidence for that decision.
-
-## Business questions
-
-| | Question | Sub-questions |
-|---|---|---|
-| **A** | Are we growing, and where does growth come from? | Monthly revenue, orders and average order value; month-over-month and year-over-year growth; categories; states |
-| **B** | Are we delivering what we promised? | Order funnel; delivery time; late deliveries and review scores; states; sellers |
-| **C** | Do customers come back? | Repeat purchase rate; cohort retention; time to the second order; effect of the first experience |
-| **D** | Which customers should we focus on? | RFM segmentation and an action for each segment |
-
-## Dataset
-
-[Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) (Kaggle). Orders from September 2016 to October 2018, amounts in Brazilian real (BRL). Eight of the nine tables are used; the geolocation table is not needed for these questions.
-
-```mermaid
-flowchart LR
-    customers["customers<br/>99,441"] --- orders["orders<br/>99,441"]
-    orders --- items["order_items<br/>112,650"]
-    orders --- payments["payments<br/>103,886"]
-    orders --- reviews["reviews<br/>99,224"]
-    items --- products["products<br/>32,951"]
-    items --- sellers["sellers<br/>3,095"]
-    products --- translation["category_translation<br/>71"]
-
-    classDef center fill:#2f54c7,stroke:#2f54c7,color:#ffffff
-    classDef table fill:#e3e9fb,stroke:#2f54c7,color:#1b201d
-    class orders center
-    class customers,items,payments,reviews,products,sellers,translation table
-```
-
-Every table links to `orders` through `order_id`. One order can have several items, several payments and, rarely, several reviews, which is why tables are summarised to one row per order before they are joined.
+[Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) (Kaggle): orders from September 2016 to October 2018, amounts in Brazilian real (BRL). Eight tables are used: orders, order items, payments, reviews, customers, products, sellers and category names.
 
 ## Approach
 
-```mermaid
-flowchart LR
-    A["1. Load<br/>8 tables into SQL Server"] --> B["2. Check<br/>keys, gaps, outliers, consistency"]
-    B --> C["3. Clean<br/>3 views with flags"]
-    C --> D["4. Analyse<br/>questions A to D in SQL"]
-    D --> E["5. Dashboard<br/>Power BI"]
-    E --> F["6. Recommend<br/>findings and actions"]
-
-    classDef done fill:#e2f2df,stroke:#2c7a2c,color:#1b201d
-    classDef doing fill:#fff4d6,stroke:#a8550a,color:#1b201d
-    classDef todo fill:#f1f3ef,stroke:#9aa49d,color:#5b645e,stroke-dasharray: 4 3
-    class A,B,C,D,E,F done
-```
+1. **Check** the data: keys, links between tables, missing and invalid values, period, outliers, consistency.
+2. **Clean** it in SQL views. The raw tables are never changed; problem records are flagged, not deleted.
+3. **Analyse** questions A to D in SQL.
+4. **Build** a Power BI dashboard with one page per question, and check every number against SQL.
+5. **Recommend** actions based on the findings.
 
 | File | Content |
 |---|---|
-| `sql/01_create_tables.sql` | Database, tables, indexes and a row count check against the CSV files |
-| `sql/02_data_checks.sql` | Data checks: keys, links, missing and invalid values, period, outliers, consistency |
-| `sql/03_clean_views.sql` | Analysis-ready views with flags for sales, the analysis window and valid deliveries |
-| `sql/04_kpi_analysis.sql` | A. Growth: monthly revenue, orders, AOV, MoM and YoY, categories, states |
-| `sql/05_operations.sql` | B. Delivery: funnel, delivery time, late deliveries and reviews, states, sellers |
-| `sql/06_cohort_retention.sql` | C. Retention: repeat customers, cohorts, time to the second order, first experience |
-| `sql/07_rfm.sql` | D. Customer segments with RFM |
-| `sql/08_powerbi_views.sql` | Result views for Power BI: sellers, cohorts, repeat-order gaps, RFM segments |
-| `powerbi/Olist_dashboard.pbix` | Dashboard: A. Growth, B. Delivery, C. Retention and D. Segments pages |
+| `sql/01_create_tables.sql` | Database and tables |
+| `sql/02_data_checks.sql` | Data checks |
+| `sql/03_clean_views.sql` | Clean views used by every analysis |
+| `sql/04_kpi_analysis.sql` | A. Growth |
+| `sql/05_operations.sql` | B. Delivery |
+| `sql/06_cohort_retention.sql` | C. Retention |
+| `sql/07_rfm.sql` | D. Customer segments |
+| `sql/08_powerbi_views.sql` | Result tables for Power BI |
+| `powerbi/Olist_dashboard.pbix` | Dashboard |
+| `docs/decision_log.md` | Every check and rule, with the reasoning |
 
-Every query in the files is followed by its result and a short interpretation.
-
-### Power BI model
-
-```mermaid
-flowchart LR
-    date["DimDate"] --> orders["vw_orders<br/>one row per order"]
-    date --> items["vw_order_items<br/>one row per item"]
-    cust["vw_customers<br/>one row per person"] --> orders
-    cust --> items
-    cust --> rfm["vw_rfm_customers"]
-    cust --> gaps["vw_repeat_gaps"]
-    sellers["vw_seller_delivery"] --> items
-    cohort["vw_cohort_retention<br/>stand-alone"]
-
-    classDef dim fill:#e3e9fb,stroke:#2f54c7,color:#1b201d
-    classDef fact fill:#2f54c7,stroke:#2f54c7,color:#ffffff
-    classDef result fill:#f1f3ef,stroke:#9aa49d,color:#1b201d
-    class date,cust dim
-    class orders,items fact
-    class rfm,gaps,sellers,cohort result
-```
-
-A star schema: two fact tables share the date and customer dimensions and are not linked to each other. The result views from `08_powerbi_views.sql` hold analyses that measures cannot rebuild (cohorts, time between orders, RFM segments, seller results). All measures live in one `_Measures` table; ratios are always total numerator divided by total denominator, never an average of ratios.
-
-## Metric definitions
-
-All metrics use sale orders (every status except canceled and unavailable) from January 2017 to August 2018, unless stated otherwise.
-
-| Metric | Definition |
-|---|---|
-| Revenue | Sum of item prices, without freight |
-| Orders | Sale orders that have at least one item |
-| Average order value (AOV) | Revenue / orders |
-| Active customers | Distinct people (`customer_unique_id`) with a sale order |
-| Delivery time | Days from purchase to delivery; the median is reported |
-| Late rate | Orders delivered after the estimated date (compared as dates) / delivered orders with valid dates |
-| 1-star share | Orders whose newest review has score 1 / reviewed orders |
-| Repeat customer rate | People with 2+ sale orders / people with at least one sale order (full history) |
-| Repeat revenue share | Revenue from people with 2+ orders / total revenue |
-| Cohort retention, month *n* | People whose first order was in a given month and who order again *n* months later / people in that cohort |
-| Days to return | Days between two consecutive orders of the same person; same-day orders are excluded |
-| Churn threshold | 280 days: 90% of returning customers come back within this time |
-| RFM | Recency: days from the last order to the day after the last order in the data. Frequency: number of orders. Monetary: revenue |
-
-## Data checks and cleaning
-
-Before any analysis, the data was checked for keys, links between tables, missing and invalid values, the period covered, outliers and consistency.
-
-> [!IMPORTANT]
-> The data is reliable: problems are small and appear in specific places. The raw tables are never changed. Cleaning rules live in three views, and problem records are flagged, not deleted, so each measure uses only the orders that are valid for it.
-
-| View | One row = | Rows | Used for |
-|---|---|---:|---|
-| `vw_orders` | one order | 99,441 | growth, delivery, reviews |
-| `vw_order_items` | one order item | 112,650 | categories, sellers, revenue |
-| `vw_customers` | one person | 96,096 | retention, segmentation |
-
-The main rules:
+## Main rules
 
 | Topic | Rule |
 |---|---|
-| Customer | A person is `customer_unique_id`: Olist creates a new `customer_id` for every order |
+| Customer | A person is `customer_unique_id`; Olist creates a new `customer_id` for every order |
 | Period | Trends use January 2017 to August 2018; the months before and after are almost empty |
 | Revenue | Sum of item prices, without freight |
 | Sale | Every order except canceled and unavailable ones |
-| Late delivery | Delivered after the estimated date, compared as dates (the estimate has no time) |
-| Review score | One score per order: the newest review |
+| Late delivery | Delivered after the estimated date |
 
-Every check, finding and rule, with the reasoning behind it: **[docs/decision_log.md](docs/decision_log.md)**
+## Findings
 
-## Key findings
+> **Olist grew fast but does not keep its customers.** Growth comes almost entirely from new customers, only 3% buy twice, and late deliveries are linked to much worse reviews.
 
-> [!IMPORTANT]
-> **Olist grew fast but does not keep its customers.** Almost all growth comes from new customers, only 3% buy twice, and late deliveries are linked to both lower review scores and fewer returning customers.
+### A. Growth
 
-### A. Are we growing?
+![Growth page](reports/images/page_a_growth.png)
 
-![Revenue by month and source of growth](reports/images/readme_a_growth.png)
+- Monthly revenue grew from 120K to 849K BRL. Growth came from more orders (+137%), not bigger baskets (+0.4%).
+- In 2018 revenue stayed flat; year-over-year growth fell from +687% to +49%.
+- 18 of 74 categories bring 80% of revenue. São Paulo brings 38%.
 
-| Measure | Result |
-|---|---|
-| Monthly revenue | About **7x** from January 2017 (120K BRL) to August 2018 (849K BRL) |
-| Source of growth | Orders **+137%**, average order value **+0.4%** (Jan-Aug 2018 vs 2017) |
-| Growth speed | Year-over-year growth fell from **+687%** (Jan 2018) to **+49%** (Aug 2018) |
-| Categories | **18 of 74** categories bring 80% of revenue; the largest is only 9% |
-| States | São Paulo brings **38%** of revenue but has the lowest revenue per customer (130 BRL) |
+### B. Delivery
 
-- Growth came from more orders, not bigger baskets. In 2018 monthly revenue stayed flat at 840K-990K BRL: growth continues but is slowing.
-- The November 2017 peak is Black Friday. The −26% month-over-month in December is not a drop, only a comparison with that peak.
+![Delivery page](reports/images/page_b_delivery.png)
 
-### B. Are we delivering what we promised?
+- 6.8% of orders arrive late, rising to 12-19% in busy months.
+- 1-star reviews rise from 6.6% for on-time orders to 69.8% for orders 8+ days late.
+- Sellers that are often late cause only 8% of late deliveries. The problem is regional (AL 21.5%, MA 17.5%), not a few bad sellers.
 
-![Late deliveries and 1-star reviews](reports/images/readme_b_delivery.png)
+### C. Retention
 
-| Measure | Result |
-|---|---|
-| Orders that reach the customer | **97.1%**; the largest loss is between payment approval and shipping (1,581 orders) |
-| Delivery time | Median **10 days**; 1 in 10 orders takes more than 23 days |
-| Late deliveries | **6.8%**, rising to **12-19%** in November 2017, February and March 2018 |
-| Late orders with 1-star reviews | **53.8%**, against 6.6% for on-time orders (**8x**) |
-| Worst sellers' share of late deliveries | The 39 sellers with 15%+ late rates cause only **8%** of all late deliveries |
+![Retention page](reports/images/page_c_retention.png)
 
-| Delay | Average score | 1-star share |
-|---|---:|---:|
-| On time | 4.29 | 6.6% |
-| 1-3 days late | 3.29 | 25.1% |
-| 4-7 days late | 2.10 | 58.6% |
-| 8+ days late | 1.70 | 69.8% |
+- Only 3% of customers buy more than once; they bring 5.6% of revenue.
+- One month after the first order, only about 5 in 1,000 customers buy again, and this has not improved over time.
+- Half of returning customers come back within 69 days, 90% within 280 days.
 
-- The score falls at every step of delay. This is a correlation, not proof of cause, but the steady pattern makes the link convincing.
-- Late deliveries are concentrated in the north-east (AL 21.5%, MA 17.5%). By number of customers affected, the priority is Rio de Janeiro: 12.1% late and about 1,490 late orders.
-- Lateness is spread across many sellers, so the fix lies in logistics and delivery estimates, not in a few bad sellers.
+### D. Customer segments
 
-### C. Do customers come back?
+![Segments page](reports/images/page_d_segments.png)
 
-![Cohort retention and days to return](reports/images/readme_c_retention.png)
-
-| Measure | Result |
-|---|---|
-| Customers who bought more than once | **3%**, bringing 5.6% of revenue |
-| Cohort retention, one month later | **0.48%** on average: about 5 in 1,000 new customers |
-| Time to the second order | Median **69 days**, 90% within **280 days** (used as the churn threshold) |
-| Customers whose first order was late | Came back about **one third less often** (1.99% vs 2.93%) |
-
-- Cohorts grew 9x over 20 months, but retention rates did not improve.
-- 29% of repeat orders came on the same day as the previous order: a split shopping session, not a customer coming back. They are excluded from the time-to-return measures.
-
-### D. Which customers should we focus on?
-
-![Customer segments](reports/images/readme_d_segments.png)
-
-| Segment | Customers | Revenue | Status |
-|---|---:|---:|---|
-| Recent big spenders | 15.6% | **29.3%** | Active |
-| Lost big spenders | 13.0% | **25.7%** | No order for 280+ days |
-| Cooling down | 24.0% | 22.0% | Inactive, not yet lost |
-| Recent customers | 23.1% | 9.0% | Active |
-| Lost customers | 21.3% | 8.4% | Lost |
-| Champions (2+ orders, active) | 2.1% | 3.9% | Active |
-| Lost repeat customers | 0.9% | 1.7% | Lost |
-
-- Big spenders bring 55% of revenue, but almost half of that revenue comes from customers already lost.
-- The first group to protect is the recent big spenders (about 14,750 people), in the two months after their first order.
+- Big spenders bring 55% of revenue.
+- Lost big spenders (no order for 280+ days) are 13% of customers but 25.7% of revenue.
 
 ## Recommendations
 
-Fifteen candidate findings, one or two per sub-question, were scored from 1 to 3 on **impact**, **actionability**, **confidence** and **surprise**. The four below scored highest; related candidates were merged.
+| # | Recommendation | How to measure |
+|---|---|---|
+| 1 | Encourage a second order within 60 days of the first one | Repeat rate within 90 days, against a control group |
+| 2 | Before busy months, add carrier capacity or add buffer days to the delivery estimate | Late rate and 1-star share in the next busy months |
+| 3 | Fix late deliveries by region and carrier, starting with Rio de Janeiro and the north-east | Late rate by state |
+| 4 | Win-back campaign for lost big spenders | Return rate, against a control group |
 
-| # | Finding | Recommendation | Owner | How to measure |
-|---|---|---|---|---|
-| 1 | Only **3%** of customers buy twice; one-month retention is **0.48%** in every cohort and has not improved while cohorts grew 9x | Second-order programme for new customers, sent within **60 days** of the first order (half of all returns happen within 69 days) | CRM / marketing | Repeat rate within 90 days, against a random control group that gets no message |
-| 2 | Late deliveries rise from **6.8%** to **12-19%** in busy months, and **70%** of orders 8+ days late get 1 star (6.6% when on time) | Before peak months (Black Friday, February-March), add capacity with carriers or add buffer days to the delivery estimate; tell customers early when an order will be late | Logistics, customer service | Late rate and 1-star share in the next peak, compared with the same months the year before |
-| 3 | Sellers late 15%+ of the time cause only **8%** of late deliveries; lateness is regional (AL **21.5%**, MA **17.5%**; RJ has the most late orders, about 1,490) | Fix lateness by region and carrier, not by removing sellers. Start with RJ (volume) and the north-east (rate) | Logistics | Late rate by state, monthly |
-| 4 | Big spenders bring **55%** of revenue; **lost big spenders** (13% of customers, no order for 280+ days) alone bring **25.7%** | Win-back campaign with a personal offer for lost big spenders; protect the **14,751** recent big spenders with recommendation (1) | CRM / marketing | Reactivation rate against a control group; revenue per contacted customer |
+## Limitations
 
-<details>
-<summary><b>Details: why, and what the data cannot prove</b></summary>
-
-**1. Second-order programme.** Almost all revenue comes from first orders, so growth depends on winning new customers every month. Even a small rise in the repeat rate adds revenue without new acquisition cost. *Limit:* the data has no website or campaign data, so it cannot say why customers do not return.
-
-**2. Peak-month delivery.** The steady rise of 1-star reviews with each day of delay (6.6% → 25.1% → 58.6% → 69.8%) is a strong pattern, and customers whose first order was late came back about one third less often (1.99% vs 2.93%). *Limit:* this is a correlation, not proof of cause. A test (for example, more buffer days in the estimate for half of the regions) would show the effect.
-
-**3. Regional logistics.** Removing the worst sellers would remove at most 8% of late deliveries. The problem is spread across large sellers with normal late rates, which points to transport and estimates. *Limit:* carrier and route data are not in the dataset.
-
-**4. Win-back for big spenders.** Lost big spenders spent 281 BRL each, as much as recent big spenders (267 BRL). *Limit:* there is no cost data, so the campaign must be tested before it is scaled; not every lost customer can be won back.
-
-</details>
-
-All four recommendations should start as tests with a control group, so their effect can be measured before they are rolled out.
-
-## Dashboard
-
-Four pages in Power BI, one per business question. Every chart title states the finding, not only the metric. Red marks late deliveries and other warning signs; gray marks the comparison group.
-
-| A. Growth | B. Delivery |
-|---|---|
-| ![A. Growth](reports/images/page_a_growth.png) | ![B. Delivery](reports/images/page_b_delivery.png) |
-| **C. Retention** | **D. Segments** |
-| ![C. Retention](reports/images/page_c_retention.png) | ![D. Segments](reports/images/page_d_segments.png) |
-
-## Repository structure
-
-```
-ecommerce-sales-analysis/
-├── README.md
-├── docs/
-│   └── decision_log.md      data checks, findings and cleaning rules
-├── sql/
-│   ├── 01_create_tables.sql
-│   ├── 02_data_checks.sql
-│   ├── 03_clean_views.sql
-│   ├── 04_kpi_analysis.sql
-│   ├── 05_operations.sql
-│   ├── 06_cohort_retention.sql
-│   ├── 07_rfm.sql
-│   └── 08_powerbi_views.sql
-├── powerbi/
-│   └── Olist_dashboard.pbix
-├── reports/
-│   ├── images/              dashboard screenshots and charts
-│   └── make_charts.py       draws the README and decision log charts from the raw CSVs
-└── data/raw/                CSV files (not stored in the repo)
-```
+- There is no cost or website traffic data, so profit and the effect of the recommendations cannot be calculated; they should be tested first.
+- The links found (for example, late delivery and low reviews) are correlations, not proven causes.
+- The data ends in August 2018, so recent customers are observed for a short time.
 
 ## How to reproduce
 
 1. Download the dataset from [Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) into `data/raw/`.
-2. Run `sql/01_create_tables.sql` in SQL Server 2022 to create the database and tables.
-3. Load each CSV into the table with the same name (SSMS Import Flat File) and run the row count check at the end of the script.
-4. Run the remaining scripts in order. `03_clean_views.sql` must run before the analysis scripts.
-5. Open `powerbi/Olist_dashboard.pbix` in Power BI Desktop and point the data source to your SQL Server (Transform data → Data source settings).
-6. Optional: `python reports/make_charts.py` redraws the README and decision log charts from the CSV files (needs pandas and matplotlib).
-
-## Limitations
-
-- **No cost data:** revenue can be measured, profit cannot.
-- **No traffic data:** there are no website visits or sessions, so conversion rates and the reasons customers do not return cannot be measured.
-- **Observational data:** links such as late delivery and low scores are correlations, not proven causes.
-- **Data ends in August 2018:** recent customers and cohorts are observed for a short time (right censoring).
-- **Reviews are optional:** satisfaction is measured only on reviewed orders.
-- **Vouchers** are recorded as a payment method; whether they are discounts is unknown, so they are not deducted from revenue.
-- **Recommendations are not costed:** without cost and campaign data, each recommendation is a hypothesis to test, not a proven return on investment.
+2. Run `sql/01_create_tables.sql` in SQL Server 2022 and load each CSV into the table with the same name.
+3. Run the other SQL files in order.
+4. Open `powerbi/Olist_dashboard.pbix` and point the data source to your SQL Server.
