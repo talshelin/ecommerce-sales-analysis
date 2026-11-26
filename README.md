@@ -5,7 +5,7 @@ An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online ma
 ![Power BI dashboard, growth page](reports/images/page_a_growth.png)
 
 > [!NOTE]
-> **Status:** data checks, cleaning, the SQL analysis and the Power BI dashboard are complete. The final recommendations are in progress.
+> **Status:** complete. Data checks, cleaning, SQL analysis, Power BI dashboard, findings and recommendations.
 
 ## Contents
 
@@ -16,10 +16,11 @@ An end-to-end analysis of about 100,000 orders from Olist, a Brazilian online ma
 5. [Metric definitions](#metric-definitions)
 6. [Data checks and cleaning](#data-checks-and-cleaning)
 7. [Key findings](#key-findings)
-8. [Dashboard](#dashboard)
-9. [Repository structure](#repository-structure)
-10. [How to reproduce](#how-to-reproduce)
-11. [Limitations](#limitations)
+8. [Recommendations](#recommendations)
+9. [Dashboard](#dashboard)
+10. [Repository structure](#repository-structure)
+11. [How to reproduce](#how-to-reproduce)
+12. [Limitations](#limitations)
 
 ---
 
@@ -30,6 +31,8 @@ Olist connects small Brazilian shops to large online marketplaces. A customer pl
 The analysis starts from a question a manager would ask:
 
 > **"Are we growing? Do our customers come back? Which customers and which problems should we focus on?"**
+
+**Business problem.** Olist's monthly revenue grew about 7x from January 2017 to August 2018, but growth slowed sharply in 2018 (year-over-year growth fell from +687% to +49%). Management needs to decide where the next growth should come from: winning more new customers, keeping the ones it already has, or fixing problems that drive customers away. This analysis gives the evidence for that decision.
 
 ## Business questions
 
@@ -75,8 +78,7 @@ flowchart LR
     classDef done fill:#e2f2df,stroke:#2c7a2c,color:#1b201d
     classDef doing fill:#fff4d6,stroke:#a8550a,color:#1b201d
     classDef todo fill:#f1f3ef,stroke:#9aa49d,color:#5b645e,stroke-dasharray: 4 3
-    class A,B,C,D,E done
-    class F doing
+    class A,B,C,D,E,F done
 ```
 
 | File | Content |
@@ -236,6 +238,32 @@ Every check, finding and rule, with the reasoning behind it: **[docs/decision_lo
 - Big spenders bring 55% of revenue, but almost half of that revenue comes from customers already lost.
 - The first group to protect is the recent big spenders (about 14,750 people), in the two months after their first order.
 
+## Recommendations
+
+Fifteen candidate findings, one or two per sub-question, were scored from 1 to 3 on **impact**, **actionability**, **confidence** and **surprise**. The four below scored highest; related candidates were merged.
+
+| # | Finding | Recommendation | Owner | How to measure |
+|---|---|---|---|---|
+| 1 | Only **3%** of customers buy twice; one-month retention is **0.48%** in every cohort and has not improved while cohorts grew 9x | Second-order programme for new customers, sent within **60 days** of the first order (half of all returns happen within 69 days) | CRM / marketing | Repeat rate within 90 days, against a random control group that gets no message |
+| 2 | Late deliveries rise from **6.8%** to **12-19%** in busy months, and **70%** of orders 8+ days late get 1 star (6.6% when on time) | Before peak months (Black Friday, February-March), add capacity with carriers or add buffer days to the delivery estimate; tell customers early when an order will be late | Logistics, customer service | Late rate and 1-star share in the next peak, compared with the same months the year before |
+| 3 | Sellers late 15%+ of the time cause only **8%** of late deliveries; lateness is regional (AL **21.5%**, MA **17.5%**; RJ has the most late orders, about 1,490) | Fix lateness by region and carrier, not by removing sellers. Start with RJ (volume) and the north-east (rate) | Logistics | Late rate by state, monthly |
+| 4 | Big spenders bring **55%** of revenue; **lost big spenders** (13% of customers, no order for 280+ days) alone bring **25.7%** | Win-back campaign with a personal offer for lost big spenders; protect the **14,751** recent big spenders with recommendation (1) | CRM / marketing | Reactivation rate against a control group; revenue per contacted customer |
+
+<details>
+<summary><b>Details: why, and what the data cannot prove</b></summary>
+
+**1. Second-order programme.** Almost all revenue comes from first orders, so growth depends on winning new customers every month. Even a small rise in the repeat rate adds revenue without new acquisition cost. *Limit:* the data has no website or campaign data, so it cannot say why customers do not return.
+
+**2. Peak-month delivery.** The steady rise of 1-star reviews with each day of delay (6.6% → 25.1% → 58.6% → 69.8%) is a strong pattern, and customers whose first order was late came back about one third less often (1.99% vs 2.93%). *Limit:* this is a correlation, not proof of cause. A test (for example, more buffer days in the estimate for half of the regions) would show the effect.
+
+**3. Regional logistics.** Removing the worst sellers would remove at most 8% of late deliveries. The problem is spread across large sellers with normal late rates, which points to transport and estimates. *Limit:* carrier and route data are not in the dataset.
+
+**4. Win-back for big spenders.** Lost big spenders spent 281 BRL each, as much as recent big spenders (267 BRL). *Limit:* there is no cost data, so the campaign must be tested before it is scaled; not every lost customer can be won back.
+
+</details>
+
+All four recommendations should start as tests with a control group, so their effect can be measured before they are rolled out.
+
 ## Dashboard
 
 Four pages in Power BI, one per business question. Every chart title states the finding, not only the metric. Red marks late deliveries and other warning signs; gray marks the comparison group.
@@ -287,3 +315,4 @@ ecommerce-sales-analysis/
 - **Data ends in August 2018:** recent customers and cohorts are observed for a short time (right censoring).
 - **Reviews are optional:** satisfaction is measured only on reviewed orders.
 - **Vouchers** are recorded as a payment method; whether they are discounts is unknown, so they are not deducted from revenue.
+- **Recommendations are not costed:** without cost and campaign data, each recommendation is a hypothesis to test, not a proven return on investment.
